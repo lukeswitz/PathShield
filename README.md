@@ -1,4 +1,5 @@
 # PathShield
+![image](https://github.com/lukeswitz/PathShield/assets/10099969/4b8ab299-9a64-4466-80d5-d288dba59815)
 
 ## Overview
 PathShield is an advanced anti-tracking tool designed for the M5StickC Plus, leveraging Bluetooth Low Energy (BLE) scanning to detect and identify potential tracking devices around you. With real-time device monitoring, manufacturer identification, and intuitive UI alerts, PathShield provides enhanced privacy and security on the go.
@@ -31,6 +32,9 @@ git clone https://github.com/yourusername/PathShield.git
 
 - Power On: Turn on your M5StickC Plus.
 - Start Scanning: The device will automatically start scanning for nearby BLE devices and display them on the screen.
+
+  ![image](https://github.com/lukeswitz/PathShield/assets/10099969/c5572ec9-d8a4-419c-bee2-3ca9525348cf)
+
 
 **Pause/Resume Scanning:**
 - Press Button A to pause or resume scanning.
