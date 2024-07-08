@@ -21,7 +21,11 @@ git clone https://github.com/yourusername/PathShield.git
 - Ensure you have the required libraries:
   `M5StickCPlus, BLEDevice, BLEUtils, BLEScan`
 
-3. Copy MacPrefixes.h to your Arduino libraries project directory
+4. Add Boards 
+
+- Visit the board docs for [M5](https://docs.m5stack.com/en/arduino/arduino_board) for up to date instructions. 
+
+3. Copy MacPrefixes.h & PathShield.ino files to your Arduino project directory
 
 ## Usage
 
@@ -40,7 +44,7 @@ git clone https://github.com/yourusername/PathShield.git
 
 **Alerts:**
 - If a new tracking device is detected, the screen will flash red and display "New Tracker Detected!" for 2 seconds, with the name MAC address of the device. 
-- When it is a "special" tracker it will flash blue.
+- When it is a "special" tracker it will flash blue. Define these as you need.
 
 **View Tracked Devices:**
 - Detected devices and their information will be listed on the screen, including name, MAC address, manufacturer, and detection count.
