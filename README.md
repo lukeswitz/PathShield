@@ -18,15 +18,16 @@ git clone https://github.com/yourusername/PathShield.git
 ```
 
 2. Add Libraries
-
 - Ensure you have the required libraries:
   `M5StickCPlus, BLEDevice, BLEUtils, BLEScan`
 
-4. Add Boards 
-
+3. Add Boards 
 - Visit the board docs for [M5](https://docs.m5stack.com/en/arduino/arduino_board) for up to date instructions. 
 
-3. Copy MacPrefixes.h & PathShield.ino files to your Arduino project directory
+4. Copy MacPrefixes.h & PathShield.ino files to your Arduino project directory
+
+5. Select Boards > esp32 > M5StickC Plus
+6. Click Upload Sketch
 
 ## Usage
 
