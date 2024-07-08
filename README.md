@@ -47,3 +47,13 @@ git clone https://github.com/yourusername/PathShield.git
 
 **Monitor Screen:**
 - The main screen shows the list of detected devices, updating in real-time as new devices are found and old devices are removed after a set detection window.
+---
+
+Disclaimer
+> [!IMPORTANT]
+>
+> This repository and all associated code, documentation, and materials are provided "as-is" without any warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement. In no event shall the authors, contributors, or copyright holders be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the software or the use or other dealings in the software.
+> By using this repository, you agree to take full responsibility for any results or consequences that may occur. The authors and contributors are not responsible for any misuse or damage caused by this software.
+
+
+Credit: This project was inspired by and builds upon the work of the Creep Detector by @skickar.
