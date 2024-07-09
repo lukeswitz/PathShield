@@ -3,9 +3,8 @@
 #include <BLEUtils.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
+#include <WiFi.h>
 #include "MacPrefixes.h"
-#include <driver/ledc.h>
-#include <driver/gpio.h>
 #include <vector>
 #include <algorithm>
 #include <set>
@@ -13,7 +12,7 @@
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 135
 #define THRESHOLD_COUNT 5
-#define SCAN_INTERVAL 10  // In seconds
+#define SCAN_INTERVAL 5  // In seconds
 #define MAX_DEVICES 75
 #define DETECTION_WINDOW 300    // Adjustable: 1 minute (60), 5 minutes (300), 10 minutes (600)
 #define STABILITY_THRESHOLD 10  // Higher threshold to reduce false positives
@@ -41,6 +40,8 @@ bool paused = false;
 bool filterByName = false;  // New flag to filter by name
 std::set<String> previouslyDetectedDevices;
 const unsigned long scanInterval = SCAN_INTERVAL * 1000;
+unsigned long lastScanTime = 0;
+unsigned long lastButtonCheck = 0;
 
 const char *specialMacs[] = {
   "00:25:DF", "20:3A:07", "34:DE:1A", "44:65:0D", "58:82:A8"
@@ -63,55 +64,66 @@ void setup() {
   BLEDevice::init("");
   pBLEScan = BLEDevice::getScan();
   pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
-  pBLEScan->setInterval(1349);
+  pBLEScan->setInterval(1100);  // Optimize scan interval
   pBLEScan->setWindow(449);
   pBLEScan->setActiveScan(true);
+
+  // Initialize WiFi for scanning
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  delay(100);
 }
 
 void loop() {
-
   M5.update();
-  // Handle Button A press to toggle pause
-  if (M5.BtnA.wasPressed()) {
-    paused = !paused;
-    M5.Lcd.fillScreen(BLACK);
-    M5.Lcd.setTextSize(3);
-    if (paused) {
-      M5.Lcd.setTextColor(RED);
-      M5.Lcd.setCursor(60, 20);
-      M5.Lcd.print("Paused");
-      for (int i = 0; i < 5; i++) {
-        M5.Lcd.drawCircle(120, 70, 10 + i * 3, M5.Lcd.color565(255 - i * 40, i * 40, 0));
-        delay(100);
+
+  // Debounce button presses
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastButtonCheck >= 200) {
+    lastButtonCheck = currentMillis;
+
+    // Handle Button A press to toggle pause
+    if (M5.BtnA.wasPressed()) {
+      paused = !paused;
+      M5.Lcd.fillScreen(BLACK);
+      M5.Lcd.setTextSize(3);
+      if (paused) {
+        M5.Lcd.setTextColor(RED);
+        M5.Lcd.setCursor(60, 20);
+        M5.Lcd.print("Paused");
+        for (int i = 0; i < 5; i++) {
+          M5.Lcd.drawCircle(120, 70, 10 + i * 3, M5.Lcd.color565(255 - i * 40, i * 40, 0));
+          delay(50);
+        }
+      } else {
+        M5.Lcd.setTextColor(GREEN);
+        M5.Lcd.setCursor(60, 20);
+        M5.Lcd.print("Resumed");
+        for (int i = 0; i < 5; i++) {
+          M5.Lcd.drawCircle(120, 70, 10 + i * 3, M5.Lcd.color565(0, 255 - i * 40, i * 40));
+          delay(50);
+        }
       }
-    } else {
-      M5.Lcd.setTextColor(GREEN);
-      M5.Lcd.setCursor(60, 20);
-      M5.Lcd.print("Resumed");
-      for (int i = 0; i < 5; i++) {
-        M5.Lcd.drawCircle(120, 70, 10 + i * 3, M5.Lcd.color565(0, 255 - i * 40, i * 40));
-        delay(100);
-      }
-    }
-    M5.Lcd.setTextSize(1);
-  } else if (M5.BtnB.wasPressed()) {
-    filterByName = !filterByName;
-    M5.Lcd.fillScreen(BLACK);
-    M5.Lcd.setTextSize(3);
-    M5.Lcd.setCursor(1, 1);
-    if (filterByName) {
-      M5.Lcd.setTextColor(BLUE);
-      M5.Lcd.print("Filter: ON");
-      for (int i = 0; i < 5; i++) {
-        M5.Lcd.drawTriangle(120, 60 + i * 5, 110, 80 + i * 5, 130, 80 + i * 5, M5.Lcd.color565(0, 0, 255 - i * 50));
-        delay(100);
-      }
-    } else {
-      M5.Lcd.setTextColor(ORANGE);
-      M5.Lcd.print("Filter: OFF");
-      for (int i = 0; i < 5; i++) {
-        M5.Lcd.drawTriangle(120, 60 + i * 5, 110, 80 + i * 5, 130, 80 + i * 5, M5.Lcd.color565(255 - i * 50, 165 - i * 30, 0));
-        delay(50);
+      M5.Lcd.setTextSize(1);
+    } else if (M5.BtnB.wasPressed()) {
+      filterByName = !filterByName;
+      M5.Lcd.fillScreen(BLACK);
+      M5.Lcd.setTextSize(3);
+      M5.Lcd.setCursor(1, 1);
+      if (filterByName) {
+        M5.Lcd.setTextColor(BLUE);
+        M5.Lcd.print("Filter: ON");
+        for (int i = 0; i < 5; i++) {
+          M5.Lcd.drawTriangle(120, 60 + i * 5, 110, 80 + i * 5, 130, 80 + i * 5, M5.Lcd.color565(0, 0, 255 - i * 50));
+          delay(50);
+        }
+      } else {
+        M5.Lcd.setTextColor(ORANGE);
+        M5.Lcd.print("Filter: OFF");
+        for (int i = 0; i < 5; i++) {
+          M5.Lcd.drawTriangle(120, 60 + i * 5, 110, 80 + i * 5, 130, 80 + i * 5, M5.Lcd.color565(255 - i * 50, 165 - i * 30, 0));
+          delay(50);
+        }
       }
     }
   }
@@ -121,26 +133,41 @@ void loop() {
     return;
   }
 
-  BLEScanResults foundDevices = pBLEScan->start(SCAN_INTERVAL, false);
-  unsigned long currentTime = millis() / 1000;  // Current time in seconds
-  bool newTrackerFound = false;                 // Flag to track new tracker detections
+  // Check scan interval
+  if (currentMillis - lastScanTime >= scanInterval) {
+    lastScanTime = currentMillis;
 
-  for (int i = 0; i < foundDevices.getCount(); i++) {
-    BLEAdvertisedDevice device = foundDevices.getDevice(i);
-    if (trackDevice(device.getAddress().toString().c_str(), device.getRSSI(), currentTime, device.getName().c_str())) {
-      newTrackerFound = true;  // Set flag if a new tracker is detected
+    // BLE Scanning
+    BLEScanResults foundDevices = pBLEScan->start(5, false);  // Reduce scan duration to 5 seconds
+    unsigned long currentTime = millis() / 1000;              // Current time in seconds
+    bool newTrackerFound = false;                             // Flag to track new tracker detections
+
+    for (int i = 0; i < foundDevices.getCount(); i++) {
+      BLEAdvertisedDevice device = foundDevices.getDevice(i);
+      if (trackDevice(device.getAddress().toString().c_str(), device.getRSSI(), currentTime, device.getName().c_str())) {
+        newTrackerFound = true;  // Set flag if a new tracker is detected
+      }
     }
-  }
 
-  if (newTrackerFound) {
-    alertUser();  // Trigger alert only if there is a new tracker detected
-  }
+    // WiFi Scanning
+    int n = WiFi.scanNetworks();
+    for (int i = 0; i < n; ++i) {
+      String macAddr = WiFi.BSSIDstr(i);
+      int rssi = WiFi.RSSI(i);
+      if (trackDevice(macAddr.c_str(), rssi, currentTime, WiFi.SSID(i).c_str())) {
+        newTrackerFound = true;  // Set flag if a new tracker is detected
+      }
+    }
 
-  pBLEScan->clearResults();  // Delete results from BLEScan buffer to release memory
-  displayTrackedDevices();
-  removeOldEntries(currentTime);
+    if (newTrackerFound) {
+      alertUser();  // Trigger alert only if there is a new tracker detected
+    }
+
+    pBLEScan->clearResults();  // Delete results from BLEScan buffer to release memory
+    displayTrackedDevices();
+    removeOldEntries(currentTime);
+  }
 }
-
 
 bool isSpecialMac(const char *address) {
   for (int i = 0; i < sizeof(specialMacs) / sizeof(specialMacs[0]); i++) {
@@ -223,7 +250,7 @@ void alertUser() {
   M5.Lcd.setTextColor(BLACK);
   M5.Lcd.setTextSize(2);
   M5.Lcd.print("New Tracker Detected!");
-  delay(2000);  // Display alert for 2 seconds
+  delay(1000);  // Display alert for 1 second
   M5.Lcd.setTextColor(WHITE);
   M5.Lcd.setTextSize(1);
 }
@@ -247,20 +274,17 @@ void displayTrackedDevices() {
     }
   }
 
-  // Sort detected devices by count in descending order
   std::sort(detectedDevices.begin(), detectedDevices.end(), [](const DeviceInfo &a, const DeviceInfo &b) {
     return b.count < a.count;
   });
 
-  // Sort other devices by count in descending order
   std::sort(otherDevices.begin(), otherDevices.end(), [](const DeviceInfo &a, const DeviceInfo &b) {
     return b.count < a.count;
   });
 
   int y = 20;
-  M5.Lcd.setTextSize(1);  // Set text size to smallest readable size
+  M5.Lcd.setTextSize(1);
 
-  // Display detected devices first
   for (const auto &device : detectedDevices) {
     if (filterByName && device.name.length() == 0) {
       continue;  // Skip devices without a name if filter is enabled
