@@ -69,4 +69,3 @@ Disclaimer
 > By using this repository, you agree to take full responsibility for any results or consequences that may occur. The authors and contributors are not responsible for any misuse or damage caused by this software.
 
 
-Credit: This project was inspired by and builds upon the work of the Creep Detector by @skickar.
