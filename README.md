@@ -12,7 +12,7 @@ PathShield is an advanced anti-tracking tool designed for the M5StickC Plus, lev
 - Manufacturer Identification: Uses a comprehensive MAC address prefix database to identify the manufacturer of detected devices.
 - Device Tracking and History: Keeps track of detected devices, including signal stability and significant RSSI variations.
 - User Interface: Interactive and responsive display with alert animations and device filtering options.
-- Device Detection: Flags known trackers and important devices based on predefined MAC addresses.
+- Device Detection: Flags known trackers and important devices based on predefined MAC addresses. Includes over 5k MAC prefixes. 
 
 ## Installation
 1. Clone the Repository:
@@ -27,7 +27,7 @@ git clone https://github.com/yourusername/PathShield.git
 3. Add Boards 
 - Visit the board docs for [M5](https://docs.m5stack.com/en/arduino/arduino_board) for up to date instructions. 
 
-4. Copy MacPrefixes.h & PathShield.ino files to your Arduino project directory
+4. Copy MacPrefixes.h & PathShield.ino files to a new Arduino project directory. 
 
 5. Select Boards > esp32 > M5StickC Plus
 6. Click Upload Sketch
@@ -51,7 +51,7 @@ git clone https://github.com/yourusername/PathShield.git
 - When the filter is OFF, the screen will display "Filter: OFF" with an orange indicator.
 
 **Alerts:**
-- If a new tracking device is detected, the screen will flash red and display "New Tracker Detected!" for 2 seconds, with the name MAC address of the device. 
+- If a new tracking device is detected, the screen will flash red and display "New Tracker Detected!" for 2 seconds, with the name, vendor & MAC address of the device. 
 - When it is a "special" tracker it will flash blue. Define these as you need.
 
 **View Tracked Devices:**
@@ -68,4 +68,4 @@ Disclaimer
 > This repository and all associated code, documentation, and materials are provided "as-is" without any warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement. In no event shall the authors, contributors, or copyright holders be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the software or the use or other dealings in the software.
 > By using this repository, you agree to take full responsibility for any results or consequences that may occur. The authors and contributors are not responsible for any misuse or damage caused by this software.
 
-
+- Credit to Alex Lynd & his partner for the initial idea of the [Creep Detector](https://github.com/AlexLynd/CreepDetector)
