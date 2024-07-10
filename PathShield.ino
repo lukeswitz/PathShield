@@ -42,6 +42,8 @@ std::set<String> previouslyDetectedDevices;
 const unsigned long scanInterval = SCAN_INTERVAL * 1000;
 unsigned long lastScanTime = 0;
 unsigned long lastButtonCheck = 0;
+unsigned long lastActivityTime = 0;  // Variable to track last activity time
+const unsigned long dimScreenInterval = 30000;  // 30 seconds interval for screen dimming
 
 const char *specialMacs[] = {
   "00:25:DF", "20:3A:07", "34:DE:1A", "44:65:0D", "58:82:A8"
@@ -76,10 +78,15 @@ void setup() {
 
 void loop() {
   M5.update();
+  unsigned long currentMillis = millis();
+
+  // Reset lastActivityTime on button press
+  if (M5.BtnA.wasPressed() || M5.BtnB.wasPressed()) {
+    lastActivityTime = currentMillis;
+  }
 
   // Debounce button presses
-  unsigned long currentMillis = millis();
-  if (currentMillis - lastButtonCheck >= 200) {
+  if (currentMillis - lastButtonCheck >= 50) {
     lastButtonCheck = currentMillis;
 
     // Handle Button A press to toggle pause
@@ -91,18 +98,14 @@ void loop() {
         M5.Lcd.setTextColor(RED);
         M5.Lcd.setCursor(60, 20);
         M5.Lcd.print("Paused");
-        for (int i = 0; i < 5; i++) {
-          M5.Lcd.drawCircle(120, 70, 10 + i * 3, M5.Lcd.color565(255 - i * 40, i * 40, 0));
-          delay(50);
-        }
+        delay(1000);  // Display message for 1 second
+        M5.Lcd.fillScreen(BLACK);  // Clear screen after message
       } else {
         M5.Lcd.setTextColor(GREEN);
         M5.Lcd.setCursor(60, 20);
         M5.Lcd.print("Resumed");
-        for (int i = 0; i < 5; i++) {
-          M5.Lcd.drawCircle(120, 70, 10 + i * 3, M5.Lcd.color565(0, 255 - i * 40, i * 40));
-          delay(50);
-        }
+        delay(1000);  // Display message for 1 second
+        M5.Lcd.fillScreen(BLACK);  // Clear screen after message
       }
       M5.Lcd.setTextSize(1);
     } else if (M5.BtnB.wasPressed()) {
@@ -113,17 +116,13 @@ void loop() {
       if (filterByName) {
         M5.Lcd.setTextColor(BLUE);
         M5.Lcd.print("Filter: ON");
-        for (int i = 0; i < 5; i++) {
-          M5.Lcd.drawTriangle(120, 60 + i * 5, 110, 80 + i * 5, 130, 80 + i * 5, M5.Lcd.color565(0, 0, 255 - i * 50));
-          delay(50);
-        }
+        delay(1000);  // Display message for 1 second
+        M5.Lcd.fillScreen(BLACK);  // Clear screen after message
       } else {
         M5.Lcd.setTextColor(ORANGE);
         M5.Lcd.print("Filter: OFF");
-        for (int i = 0; i < 5; i++) {
-          M5.Lcd.drawTriangle(120, 60 + i * 5, 110, 80 + i * 5, 130, 80 + i * 5, M5.Lcd.color565(255 - i * 50, 165 - i * 30, 0));
-          delay(50);
-        }
+        delay(1000);  // Display message for 1 second
+        M5.Lcd.fillScreen(BLACK);  // Clear screen after message
       }
     }
   }
