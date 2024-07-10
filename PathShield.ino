@@ -33,6 +33,36 @@ struct DeviceInfo {
   int variationCount;   // Counter for significant RSSI variations
 };
 
+struct Payload {
+  String deviceAddress;
+  String deviceName;
+  String manufacturer;
+  int rssi;
+  unsigned long timestamp;
+};
+
+void sendPayload(const Payload &payload) {
+  if (WiFi.status() == WL_CONNECTED) {
+    WiFiClient client;
+    if (client.connect("node_address", 8080)) {  // Replace "node_address" with the actual address
+      String jsonPayload = "{";
+      jsonPayload += "\"deviceAddress\":\"" + payload.deviceAddress + "\",";
+      jsonPayload += "\"deviceName\":\"" + payload.deviceName + "\",";
+      jsonPayload += "\"manufacturer\":\"" + payload.manufacturer + "\",";
+      jsonPayload += "\"rssi\":" + String(payload.rssi) + ",";
+      jsonPayload += "\"timestamp\":" + String(payload.timestamp);
+      jsonPayload += "}";
+      client.println("POST /nzyme_tap HTTP/1.1");
+      client.println("Host: node_address");  // Replace "node_address" with the actual address
+      client.println("Content-Type: application/json");
+      client.println("Content-Length: " + String(jsonPayload.length()));
+      client.println();
+      client.println(jsonPayload);
+      client.stop();
+    }
+  }
+}
+
 DeviceInfo trackedDevices[MAX_DEVICES];
 int deviceIndex = 0;
 BLEScan *pBLEScan;
@@ -72,6 +102,13 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   delay(100);
+
+  WiFi.begin("your_SSID", "your_PASSWORD");  // Replace with actual SSID and password
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("WiFi connected");
 }
 
 void loop() {
@@ -161,6 +198,20 @@ void loop() {
 
     if (newTrackerFound) {
       alertUser();  // Trigger alert only if there is a new tracker detected
+    }
+
+    // Send payloads for detected devices
+    for (int i = 0; i < deviceIndex; i++) {
+      if (trackedDevices[i].detected) {
+        Payload payload = {
+          trackedDevices[i].address,
+          trackedDevices[i].name,
+          trackedDevices[i].manufacturer,
+          trackedDevices[i].lastRssi,
+          trackedDevices[i].lastSeen
+        };
+        sendPayload(payload);
+      }
     }
 
     pBLEScan->clearResults();  // Delete results from BLEScan buffer to release memory
