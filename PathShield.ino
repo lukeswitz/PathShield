@@ -13,7 +13,7 @@
 #define SCREEN_HEIGHT 135
 #define THRESHOLD_COUNT 5
 #define SCAN_INTERVAL 5  // In seconds
-#define MAX_DEVICES 75
+#define MAX_DEVICES 150
 #define DETECTION_WINDOW 300    // Adjustable: 1 minute (60), 5 minutes (300), 10 minutes (600)
 #define STABILITY_THRESHOLD 10  // Higher threshold to reduce false positives
 #define VARIATION_THRESHOLD 25  // Minimum variation in RSSI to flag a device as a potential tracker
@@ -229,6 +229,17 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime, const
         newTracker = true;  // Mark as a new tracker detection
       }
       previouslyDetectedDevices.insert(trackedDevices[0].address);
+    } else {
+      // Check if the device was previously detected and reintroduce it
+      if (previouslyDetectedDevices.find(String(address)) != previouslyDetectedDevices.end()) {
+        for (int j = deviceIndex; j > 0; j--) {
+          trackedDevices[j] = trackedDevices[j - 1];
+        }
+        trackedDevices[0] = { String(address), String(name), getManufacturer(address), 1, currentTime, rssi, 1, rssi, false, false, 0, 0 };
+        if (isSpecialMac(address) || (trackedDevices[0].count >= THRESHOLD_COUNT && trackedDevices[0].variationCount > THRESHOLD_COUNT)) {
+          newTracker = true;  // Mark as a new tracker detection
+        }
+      }
     }
   }
 
@@ -340,6 +351,7 @@ void removeOldEntries(unsigned long currentTime) {
       for (int j = i; j < deviceIndex - 1; j++) {
         trackedDevices[j] = trackedDevices[j + 1];
       }
+      previouslyDetectedDevices.insert(trackedDevices[i].address);  // Add to previously detected set
       deviceIndex--;  // Decrement the device count
       i--;            // Recheck the new element at this index
     }
