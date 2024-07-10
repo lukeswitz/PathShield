@@ -17,6 +17,7 @@
 #define DETECTION_WINDOW 300    // Adjustable: 1 minute (60), 5 minutes (300), 10 minutes (600)
 #define STABILITY_THRESHOLD 10  // Higher threshold to reduce false positives
 #define VARIATION_THRESHOLD 25  // Minimum variation in RSSI to flag a device as a potential tracker
+#define REINTRODUCTION_TIME 600  // Time in seconds (e.g., 10 minutes)
 
 struct DeviceInfo {
   String address;
@@ -232,12 +233,22 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime, const
     } else {
       // Check if the device was previously detected and reintroduce it
       if (previouslyDetectedDevices.find(String(address)) != previouslyDetectedDevices.end()) {
-        for (int j = deviceIndex; j > 0; j--) {
-          trackedDevices[j] = trackedDevices[j - 1];
+        // Check if the device reappears after the reintroduction time
+        unsigned long lastSeenTime = 0;
+        for (int i = 0; i < deviceIndex; i++) {
+          if (trackedDevices[i].address.equals(address)) {
+            lastSeenTime = trackedDevices[i].lastSeen;
+            break;
+          }
         }
-        trackedDevices[0] = { String(address), String(name), getManufacturer(address), 1, currentTime, rssi, 1, rssi, false, false, 0, 0 };
-        if (isSpecialMac(address) || (trackedDevices[0].count >= THRESHOLD_COUNT && trackedDevices[0].variationCount > THRESHOLD_COUNT)) {
-          newTracker = true;  // Mark as a new tracker detection
+        if (currentTime - lastSeenTime > REINTRODUCTION_TIME) {
+          for (int j = deviceIndex; j > 0; j--) {
+            trackedDevices[j] = trackedDevices[j - 1];
+          }
+          trackedDevices[0] = { String(address), String(name), getManufacturer(address), 1, currentTime, rssi, 1, rssi, false, false, 0, 0 };
+          if (isSpecialMac(address) || (trackedDevices[0].count >= THRESHOLD_COUNT && trackedDevices[0].variationCount > THRESHOLD_COUNT)) {
+            newTracker = true;  // Mark as a new tracker detection
+          }
         }
       }
     }
