@@ -13,7 +13,7 @@
 #define SCREEN_HEIGHT 135
 #define THRESHOLD_COUNT 5
 #define SCAN_INTERVAL 5  // In seconds
-#define MAX_DEVICES 150
+#define MAX_DEVICES 300
 #define DETECTION_WINDOW 300    // Adjustable: 1 minute (60), 5 minutes (300), 10 minutes (600)
 #define STABILITY_THRESHOLD 10  // Higher threshold to reduce false positives
 #define VARIATION_THRESHOLD 25  // Minimum variation in RSSI to flag a device as a potential tracker
