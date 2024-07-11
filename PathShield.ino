@@ -26,6 +26,7 @@ const char *nzyme_host = "your_nzyme_host";
 const int nzyme_port = 443;
 const char *nzyme_path = "/api/your_endpoint";  // Adjust the path as per Nzyme docs
 bool highBrightness = true;
+bool didTrigger = false;
 
 WiFiClientSecure client;
 
@@ -40,9 +41,11 @@ struct DeviceInfo {
   int lastRssi;
   bool detected;
   bool isSpecial;
+  bool alertTriggered;  // Add this flag
   int stableRssiCount;
   int variationCount;
 };
+
 
 DeviceInfo trackedDevices[MAX_DEVICES];
 unsigned long currentMillis;
@@ -70,7 +73,7 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
 };
 
 void setup() {
-    // // Connect to WiFi
+  // // Connect to WiFi
   // WiFi.begin(ssid, password);
   // while (WiFi.status() != WL_CONNECTED) {
   //   delay(1000);
@@ -84,7 +87,7 @@ void setup() {
   M5.Lcd.setTextColor(GREEN);
   M5.Lcd.setTextSize(1);
   M5.Axp.ScreenBreath(80);
-  
+
   BLEDevice::init("");
   pBLEScan = BLEDevice::getScan();
   pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
@@ -248,15 +251,21 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime, const
       trackedDevices[i].manufacturer = getManufacturer(address);
       found = true;
       if (isSpecialMac(address)) {
-                trackedDevices[i].detected = true;
+        trackedDevices[i].detected = true;
         trackedDevices[i].isSpecial = true;
+        if (!trackedDevices[i].alertTriggered) {
+          trackedDevices[i].alertTriggered = true;  // Trigger alert only once
+          newTracker = true;
+        }
         moveToTop(i);
-        newTracker = true;
       } else if (trackedDevices[i].count >= THRESHOLD_COUNT && trackedDevices[i].variationCount > THRESHOLD_COUNT) {
         trackedDevices[i].detected = true;
         trackedDevices[i].isSpecial = false;
+        if (!trackedDevices[i].alertTriggered) {
+          trackedDevices[i].alertTriggered = true;  // Trigger alert only once
+          newTracker = true;
+        }
         moveToTop(i);
-        newTracker = true;
       }
       break;
     }
@@ -267,9 +276,10 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime, const
       for (int j = deviceIndex; j > 0; j--) {
         trackedDevices[j] = trackedDevices[j - 1];
       }
-      trackedDevices[0] = { String(address), String(name), getManufacturer(address), 1, currentTime, rssi, 1, rssi, false, false, 0, 0 };
+      trackedDevices[0] = { String(address), String(name), getManufacturer(address), 1, currentTime, rssi, 1, rssi, false, false, false, 0, 0 };
       deviceIndex++;
       if (isSpecialMac(address) || (trackedDevices[0].count >= THRESHOLD_COUNT && trackedDevices[0].variationCount > THRESHOLD_COUNT)) {
+        trackedDevices[0].alertTriggered = true;  // Trigger alert only once
         newTracker = true;
       }
       previouslyDetectedDevices.insert(trackedDevices[0].address);
@@ -278,6 +288,7 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime, const
 
   return newTracker;
 }
+
 
 void moveToTop(int index) {
   if (index <= 0) return;
@@ -288,8 +299,10 @@ void moveToTop(int index) {
   trackedDevices[0] = temp;
 }
 
+
 void alertUser(bool isSpecial, const String &name, const String &mac) {
-  if (isSpecial) { // flash red/blue five times
+  didTrigger = !didTrigger;
+  if (isSpecial) {  // flash red/blue five times
     for (int i = 0; i < 5; i++) {
       M5.Lcd.fillScreen(RED);
       delay(200);
@@ -460,12 +473,7 @@ void sendToNzyme(const String &jsonPayload) {
     return;
   }
 
-  String request = String("POST ") + nzyme_path + " HTTP/1.1\r\n" + 
-                   "Host: " + nzyme_host + "\r\n" + 
-                   "Content-Type: application/json\r\n" + 
-                   "Content-Length: " + jsonPayload.length() + "\r\n" + 
-                   "Connection: close\r\n\r\n" + 
-                   jsonPayload + "\r\n";
+  String request = String("POST ") + nzyme_path + " HTTP/1.1\r\n" + "Host: " + nzyme_host + "\r\n" + "Content-Type: application/json\r\n" + "Content-Length: " + jsonPayload.length() + "\r\n" + "Connection: close\r\n\r\n" + jsonPayload + "\r\n";
 
   client.print(request);
 
@@ -482,5 +490,3 @@ void sendToNzyme(const String &jsonPayload) {
 
   client.stop();
 }
-
-       
