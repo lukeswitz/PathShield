@@ -19,6 +19,7 @@
 #define STABILITY_THRESHOLD 10
 #define VARIATION_THRESHOLD 20
 #define IDLE_TIMEOUT 30000  // 30 seconds in milliseconds
+#define SENSITIVITY 5  // Example sensitivity value
 
 const char *ssid = "your_SSID";
 const char *password = "your_PASSWORD";
@@ -185,7 +186,7 @@ void handleBtnA() {
     }
   }
   M5.Lcd.setTextSize(1);
-  displayTrackedDevices();
+  displayMenuScreen();  // Navigate to the menu screen
 }
 
 void handleBtnB() {
@@ -214,6 +215,7 @@ void handleBtnB() {
       displayTrackedDevices();
     }
   }
+  displayMenuScreen();  // Navigate to the menu screen
 }
 
 bool isSpecialMac(const char *address) {
@@ -430,6 +432,49 @@ void displayTrackedDevices() {
       return;  // Stop if we reach the bottom of the screen
     }
   }
+}
+
+void displayMenuScreen() {
+    M5.Lcd.fillScreen(BLACK);
+    M5.Lcd.setCursor(5, 1);
+    M5.Lcd.setTextColor(GREEN);
+    M5.Lcd.setTextSize(2);
+    M5.Lcd.print("Menu");
+
+    M5.Lcd.setTextSize(1);
+    int y = 20;
+
+    // Display battery level
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Battery: ");
+    M5.Lcd.print(M5.Axp.GetBatVoltage());
+    M5.Lcd.print("V");
+    y += 12;
+
+    // Display brightness level
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Brightness: ");
+    M5.Lcd.print(highBrightness ? "High" : "Low");
+    y += 12;
+
+    // Display number of devices found
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Devices Found: ");
+    M5.Lcd.print(deviceIndex);
+    y += 12;
+
+    // Display sensitivity setting
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Sensitivity: ");
+    M5.Lcd.print(SENSITIVITY);  // Assuming SENSITIVITY is a defined constant
+    y += 12;
+
+    // Display other settings
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Other Settings: ");
+    y += 12;
+
+    // Add more settings as needed
 }
 
 void removeOldEntries(unsigned long currentTime) {
