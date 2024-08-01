@@ -9,7 +9,7 @@
 #include <vector>
 #include <algorithm>
 #include <set>
-
+#include <SPIFFS.h>
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 135
 #define THRESHOLD_COUNT 5
@@ -44,6 +44,7 @@ struct DeviceInfo {
   bool alertTriggered;  // Add this flag
   int stableRssiCount;
   int variationCount;
+  int lastSeenTime;  // Add this line
 };
 
 
@@ -94,13 +95,19 @@ void setup() {
   pBLEScan->setInterval(1100);  // Optimize scan interval
   pBLEScan->setWindow(449);
   pBLEScan->setActiveScan(true);
+
+  if (!SPIFFS.begin(true)) {
+    Serial.println("An Error has occurred while mounting SPIFFS");
+    return;
+  }
+
+  loadDeviceData();
 }
 
 void loop() {
 
   M5.update();
   currentMillis = millis();
-
   // Handle BtnA press
   if (M5.BtnA.wasPressed()) {
     handleBtnA();
@@ -157,6 +164,7 @@ void loop() {
   displayTrackedDevices();
   removeOldEntries(currentTime);
   sendToNzyme(prepareNzymePayload());  // Send data to Nzyme
+  saveDeviceData();  // Save device data persistently
 }
 
 void handleBtnA() {
@@ -276,7 +284,7 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime, const
       for (int j = deviceIndex; j > 0; j--) {
         trackedDevices[j] = trackedDevices[j - 1];
       }
-      trackedDevices[0] = { String(address), String(name), getManufacturer(address), 1, currentTime, rssi, 1, rssi, false, false, false, 0, 0 };
+      trackedDevices[0] = { String(address), String(name), getManufacturer(address), 1, currentTime, rssi, 1, rssi, false, false, false, 0, 0, currentTime };
       deviceIndex++;
       if (isSpecialMac(address) || (trackedDevices[0].count >= THRESHOLD_COUNT && trackedDevices[0].variationCount > THRESHOLD_COUNT)) {
         trackedDevices[0].alertTriggered = true;  // Trigger alert only once
@@ -288,7 +296,6 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime, const
 
   return newTracker;
 }
-
 
 void moveToTop(int index) {
   if (index <= 0) return;
@@ -489,4 +496,41 @@ void sendToNzyme(const String &jsonPayload) {
   }
 
   client.stop();
+}
+
+void saveDeviceData() {
+  File file = SPIFFS.open("/devices.txt", FILE_WRITE);
+  if (!file) {
+    Serial.println("Failed to open file for writing");
+    return;
+  }
+
+  for (int i = 0; i < deviceIndex; i++) {
+    file.println(trackedDevices[i].address + "," + String(trackedDevices[i].lastSeen));
+  }
+
+  file.close();
+}
+
+void loadDeviceData() {
+  File file = SPIFFS.open("/devices.txt", FILE_READ);
+  if (!file) {
+    Serial.println("Failed to open file for reading");
+    return;
+  }
+
+  while (file.available()) {
+    String line = file.readStringUntil('\n');
+    int commaIndex = line.indexOf(',');
+    String address = line.substring(0, commaIndex);
+    unsigned long lastSeen = line.substring(commaIndex + 1).toInt();
+
+    // Add the device to the trackedDevices array
+    if (deviceIndex < MAX_DEVICES) {
+      trackedDevices[deviceIndex] = { address, "", "", 0, lastSeen, 0, 0, 0, false, false, false, 0, 0, lastSeen };
+      deviceIndex++;
+    }
+  }
+
+  file.close();
 }
