@@ -380,25 +380,65 @@ void displayTrackedDevices() {
   int y = 20;
   M5.Lcd.setTextSize(1);
 
-  // Combine detected and other devices for display
-  std::vector<DeviceInfo> allDevices = detectedDevices;
-  allDevices.insert(allDevices.end(), otherDevices.begin(), otherDevices.end());
-
-  // Display devices based on scrollIndex
-  for (int i = scrollIndex; i < allDevices.size() && i < scrollIndex + devicesPerPage; i++) {
-    const auto &device = allDevices[i];
+  // Display detected devices (known trackers) first
+  for (const auto &device : detectedDevices) {
     if (filterByName && device.name.length() == 0) {
       continue;  // Skip devices without a name if filter is enabled
     }
     M5.Lcd.setTextSize(1);
     M5.Lcd.setCursor(2, y);
-    M5.Lcd.setTextColor(device.detected ? RED : WHITE);
+    M5.Lcd.setTextColor(RED);
     M5.Lcd.print(device.name);
     M5.Lcd.print(" ");
     M5.Lcd.print(device.address);
     y += 10;
 
     M5.Lcd.setTextSize(1);
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print(device.manufacturer);
+    M5.Lcd.print("  Count: ");
+    M5.Lcd.print(device.count);
+    y += 12;
+
+    if (y >= SCREEN_HEIGHT - 20) {
+      return;  // Stop if we reach the bottom of the screen
+    }
+  }
+
+  // Display the latest detected device
+  if (!otherDevices.empty()) {
+    DeviceInfo latestDevice = otherDevices.front();
+    otherDevices.erase(otherDevices.begin());  // Remove the latest device from the list
+
+    M5.Lcd.setTextSize(1);
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.setTextColor(YELLOW);
+    M5.Lcd.print(latestDevice.name);
+    M5.Lcd.print(" ");
+    M5.Lcd.print(latestDevice.address);
+    y += 10;
+
+    M5.Lcd.setTextSize(1);
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print(latestDevice.manufacturer);
+    M5.Lcd.print("  Count: ");
+    M5.Lcd.print(latestDevice.count);
+    y += 12;
+  }
+
+  // Display the remaining devices sorted by count
+  for (const auto &device : otherDevices) {
+    if (filterByName && device.name.length() == 0) {
+      continue;  // Skip devices without a name if filter is enabled
+    }
+
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.setTextColor(WHITE);
+    M5.Lcd.print(device.name);
+    M5.Lcd.print(" ");
+    M5.Lcd.print(device.address);
+    y += 10;
+
     M5.Lcd.setCursor(2, y);
     M5.Lcd.print(device.manufacturer);
     M5.Lcd.print("  Count: ");
