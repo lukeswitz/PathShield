@@ -112,6 +112,9 @@ void loop() {
     handleBtnB();
   }
 
+  // Handle button combination for menu access
+  handleButtonCombination();
+
   if (paused) {
     delay(100);  // Small delay to avoid busy-waiting
     return;
@@ -186,7 +189,7 @@ void handleBtnA() {
     }
   }
   M5.Lcd.setTextSize(1);
-  displayMenuScreen();  // Navigate to the menu screen
+  // Remove the call to displayMenuScreen here
 }
 
 void handleBtnB() {
@@ -215,7 +218,14 @@ void handleBtnB() {
       displayTrackedDevices();
     }
   }
-  displayMenuScreen();  // Navigate to the menu screen
+  M5.Lcd.setTextSize(1);
+  // Remove the call to displayMenuScreen here
+}
+
+void handleButtonCombination() {
+  if (M5.BtnA.isPressed() && M5.BtnB.isPressed()) {
+    displayMenuScreen();
+  }
 }
 
 bool isSpecialMac(const char *address) {
@@ -475,6 +485,10 @@ void displayMenuScreen() {
     y += 12;
 
     // Add more settings as needed
+
+    // Add a "Back" option
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Press BtnA + BtnB to go back");
 }
 
 void removeOldEntries(unsigned long currentTime) {
