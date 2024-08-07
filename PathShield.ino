@@ -189,7 +189,7 @@ void handleBtnA() {
     }
   }
   M5.Lcd.setTextSize(1);
-  // Remove the call to displayMenuScreen here
+  displayTrackedDevices();
 }
 
 void handleBtnB() {
@@ -223,8 +223,16 @@ void handleBtnB() {
 }
 
 void handleButtonCombination() {
+  static bool inMenu = false;
   if (M5.BtnA.isPressed() && M5.BtnB.isPressed()) {
-    displayMenuScreen();
+    if (inMenu) {
+      M5.Lcd.fillScreen(BLACK);
+      displayTrackedDevices();
+      inMenu = false;
+    } else {
+      displayMenuScreen();
+      inMenu = true;
+    }
   }
 }
 
