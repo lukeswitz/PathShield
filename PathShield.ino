@@ -181,18 +181,10 @@ void handleBtnA() {
     M5.Lcd.setTextColor(RED);
     M5.Lcd.setCursor(60, 20);
     M5.Lcd.print("Paused");
-    for (int i = 0; i < 5; i++) {
-      M5.Lcd.drawCircle(120, 70, 10 + i * 3, M5.Lcd.color565(255 - i * 40, i * 40, 0));
-      delay(1120);
-    }
   } else {
     M5.Lcd.setTextColor(GREEN);
     M5.Lcd.setCursor(60, 20);
     M5.Lcd.print("Resumed");
-    for (int i = 0; i < 5; i++) {
-      M5.Lcd.drawCircle(120, 70, 10 + i * 3, M5.Lcd.color565(0, 255 - i * 40, i * 40));
-      delay(1120);
-    }
   }
   M5.Lcd.setTextSize(1);
   displayTrackedDevices();
@@ -206,7 +198,7 @@ void handleBtnB() {
 
   if (paused) {
     // Scroll down
-    if (scrollIndex < (allDevices.size() - devicesPerPage)) {
+    if (scrollIndex < (deviceIndex - devicesPerPage)) {
       scrollIndex++;
     }
   } else {
@@ -218,20 +210,12 @@ void handleBtnB() {
   if (filterByName) {
     M5.Lcd.setTextColor(BLUE);
     M5.Lcd.print("Filter: ON");
-    for (int i = 0; i < 5; i++) {
-      M5.Lcd.drawTriangle(120, 60 + i * 5, 110, 80 + i * 5, 130, 80 + i * 5, M5.Lcd.color565(0, 0, 255 - i * 50));
-      delay(1150);
-      displayTrackedDevices();
-    }
   } else {
     M5.Lcd.setTextColor(ORANGE);
     M5.Lcd.print("Filter: OFF");
-    for (int i = 0; i < 5; i++) {
-      M5.Lcd.drawTriangle(120, 60 + i * 5, 110, 80 + i * 5, 130, 80 + i * 5, M5.Lcd.color565(255 - i * 50, 165 - i * 30, 0));
-      delay(1150);
-      displayTrackedDevices();
-    }
   }
+  M5.Lcd.setTextSize(1);
+  displayTrackedDevices();
 }
 
 bool isSpecialMac(const char *address) {
@@ -386,7 +370,13 @@ void displayTrackedDevices() {
   // Display devices based on scrollIndex and devicesPerPage
   for (int i = scrollIndex; i < scrollIndex + devicesPerPage && i < allDevices.size(); i++) {
     const auto &device = allDevices[i];
-    M5.Lcd.setTextColor(device.isSpecial ? BLUE : RED);
+    if (device.isSpecial) {
+      M5.Lcd.setTextColor(BLUE);
+    } else if (device.detected) {
+      M5.Lcd.setTextColor(RED);
+    } else {
+      M5.Lcd.setTextColor(WHITE);
+    }
     M5.Lcd.setCursor(2, y);
     M5.Lcd.print(device.name);
     M5.Lcd.print(" ");
