@@ -9,7 +9,7 @@
 #include <vector>
 #include <algorithm>
 #include <set>
-
+#include <SPIFFS.h>
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 135
 #define THRESHOLD_COUNT 5
@@ -19,6 +19,7 @@
 #define STABILITY_THRESHOLD 10
 #define VARIATION_THRESHOLD 20
 #define IDLE_TIMEOUT 30000  // 30 seconds in milliseconds
+#define SENSITIVITY 5  // Example sensitivity value
 
 const char *ssid = "your_SSID";
 const char *password = "your_PASSWORD";
@@ -44,6 +45,7 @@ struct DeviceInfo {
   bool alertTriggered;  // Add this flag
   int stableRssiCount;
   int variationCount;
+  int lastSeenTime;  // Add this line
 };
 
 
@@ -74,13 +76,13 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
 };
 
 void setup() {
-  // // Connect to WiFi
-  // WiFi.begin(ssid, password);
-  // while (WiFi.status() != WL_CONNECTED) {
-  //   delay(1000);
-  //   Serial.println("Connecting to WiFi...");
-  // }
-  // Serial.println("Connected to WiFi");
+  // Connect to WiFi
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(100);
+    Serial.println("Connecting to WiFi...");
+  }
+  Serial.println("Connected to WiFi");
 
   M5.begin();
   M5.Lcd.fillScreen(BLACK);
@@ -95,10 +97,16 @@ void setup() {
   pBLEScan->setInterval(1100);  // Optimize scan interval
   pBLEScan->setWindow(449);
   pBLEScan->setActiveScan(true);
+
+  if (!SPIFFS.begin(true)) {
+    Serial.println("An Error has occurred while mounting SPIFFS");
+    return;
+  }
+
+  loadDeviceData();
 }
 
 void loop() {
-
   M5.update();
   currentMillis = millis();
 
@@ -112,6 +120,9 @@ void loop() {
     handleBtnB();
   }
 
+  // Handle button combination for menu access
+  handleButtonCombination();
+
   if (paused) {
     delay(100);  // Small delay to avoid busy-waiting
     return;
@@ -123,16 +134,6 @@ void loop() {
     M5.Axp.ScreenBreath(30);
     screenDimmed = true;
   }
-
-  // // WiFi Scanning for nzyme & in general
-  // int n = WiFi.scanNetworks();
-  // for (int i = 0; i < n; ++i) {
-  //   String macAddr = WiFi.BSSIDstr(i);
-  //   int rssi = WiFi.RSSI(i);
-  //   if (trackDevice(macAddr.c_str(), rssi, currentTime, WiFi.SSID(i).c_str())) {
-  //     newTrackerFound = true;
-  //   }
-  // }
 
   // BT Scanning
   BLEScanResults foundDevices = pBLEScan->start(5, false);
@@ -157,7 +158,15 @@ void loop() {
   pBLEScan->clearResults();
   displayTrackedDevices();
   removeOldEntries(currentTime);
-  sendToNzyme(prepareNzymePayload());  // Send data to Nzyme
+
+  // Send data to Nzyme periodically
+  static unsigned long lastNzymeSendTime = 0;
+  if (currentMillis - lastNzymeSendTime > scanInterval) {
+    lastNzymeSendTime = currentMillis;
+    sendToNzyme(prepareNzymePayload());
+  }
+
+  saveDeviceData();  // Save device data persistently
 }
 
 void handleBtnA() {
@@ -216,6 +225,20 @@ void handleBtnB() {
   }
   M5.Lcd.setTextSize(1);
   displayTrackedDevices();
+}
+
+void handleButtonCombination() {
+  static bool inMenu = false;
+  if (M5.BtnA.isPressed() && M5.BtnB.isPressed()) {
+    if (inMenu) {
+      M5.Lcd.fillScreen(BLACK);
+      displayTrackedDevices();
+      inMenu = false;
+    } else {
+      displayMenuScreen();
+      inMenu = true;
+    }
+  }
 }
 
 bool isSpecialMac(const char *address) {
@@ -278,7 +301,7 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime, const
       for (int j = deviceIndex; j > 0; j--) {
         trackedDevices[j] = trackedDevices[j - 1];
       }
-      trackedDevices[0] = { String(address), String(name), getManufacturer(address), 1, currentTime, rssi, 1, rssi, false, false, false, 0, 0 };
+      trackedDevices[0] = { String(address), String(name), getManufacturer(address), 1, currentTime, rssi, 1, rssi, false, false, false, 0, 0, currentTime };
       deviceIndex++;
       if (isSpecialMac(address) || (trackedDevices[0].count >= THRESHOLD_COUNT && trackedDevices[0].variationCount > THRESHOLD_COUNT)) {
         trackedDevices[0].alertTriggered = true;  // Trigger alert only once
@@ -290,7 +313,6 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime, const
 
   return newTracker;
 }
-
 
 void moveToTop(int index) {
   if (index <= 0) return;
@@ -396,6 +418,53 @@ void displayTrackedDevices() {
   }
 }
 
+void displayMenuScreen() {
+    M5.Lcd.fillScreen(BLACK);
+    M5.Lcd.setCursor(5, 1);
+    M5.Lcd.setTextColor(GREEN);
+    M5.Lcd.setTextSize(2);
+    M5.Lcd.print("Menu");
+
+    M5.Lcd.setTextSize(1);
+    int y = 20;
+
+    // Display battery level
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Battery: ");
+    M5.Lcd.print(M5.Axp.GetBatVoltage());
+    M5.Lcd.print("V");
+    y += 12;
+
+    // Display brightness level
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Brightness: ");
+    M5.Lcd.print(highBrightness ? "High" : "Low");
+    y += 12;
+
+    // Display number of devices found
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Devices Found: ");
+    M5.Lcd.print(deviceIndex);
+    y += 12;
+
+    // Display sensitivity setting
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Sensitivity: ");
+    M5.Lcd.print(SENSITIVITY);  // Assuming SENSITIVITY is a defined constant
+    y += 12;
+
+    // Display other settings
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Other Settings: ");
+    y += 12;
+
+    // Add more settings as needed
+
+    // Add a "Back" option
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Press BtnA + BtnB to go back");
+}
+
 void removeOldEntries(unsigned long currentTime) {
   for (int i = 0; i < deviceIndex; i++) {
     if (currentTime - trackedDevices[i].lastSeen > DETECTION_WINDOW) {
@@ -432,12 +501,22 @@ String prepareNzymePayload() {
 }
 
 void sendToNzyme(const String &jsonPayload) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi not connected!");
+    return;
+  }
+
   if (!client.connect(nzyme_host, nzyme_port)) {
     Serial.println("Connection to Nzyme failed!");
     return;
   }
 
-  String request = String("POST ") + nzyme_path + " HTTP/1.1\r\n" + "Host: " + nzyme_host + "\r\n" + "Content-Type: application/json\r\n" + "Content-Length: " + jsonPayload.length() + "\r\n" + "Connection: close\r\n\r\n" + jsonPayload + "\r\n";
+  String request = String("POST ") + nzyme_path + " HTTP/1.1\r\n" + 
+                   "Host: " + nzyme_host + "\r\n" + 
+                   "Content-Type: application/json\r\n" + 
+                   "Content-Length: " + jsonPayload.length() + "\r\n" + 
+                   "Connection: close\r\n\r\n" + 
+                   jsonPayload + "\r\n";
 
   client.print(request);
 
@@ -453,4 +532,41 @@ void sendToNzyme(const String &jsonPayload) {
   }
 
   client.stop();
+}
+
+void saveDeviceData() {
+  File file = SPIFFS.open("/devices.txt", FILE_WRITE);
+  if (!file) {
+    Serial.println("Failed to open file for writing");
+    return;
+  }
+
+  for (int i = 0; i < deviceIndex; i++) {
+    file.println(trackedDevices[i].address + "," + String(trackedDevices[i].lastSeen));
+  }
+
+  file.close();
+}
+
+void loadDeviceData() {
+  File file = SPIFFS.open("/devices.txt", FILE_READ);
+  if (!file) {
+    Serial.println("Failed to open file for reading");
+    return;
+  }
+
+  while (file.available()) {
+    String line = file.readStringUntil('\n');
+    int commaIndex = line.indexOf(',');
+    String address = line.substring(0, commaIndex);
+    unsigned long lastSeen = line.substring(commaIndex + 1).toInt();
+
+    // Add the device to the trackedDevices array
+    if (deviceIndex < MAX_DEVICES) {
+      trackedDevices[deviceIndex] = { address, "", "", 0, lastSeen, 0, 0, 0, false, false, false, 0, 0, lastSeen };
+      deviceIndex++;
+    }
+  }
+
+  file.close();
 }
