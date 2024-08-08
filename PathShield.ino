@@ -74,13 +74,13 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
 };
 
 void setup() {
-  // // Connect to WiFi
-  // WiFi.begin(ssid, password);
-  // while (WiFi.status() != WL_CONNECTED) {
-  //   delay(1000);
-  //   Serial.println("Connecting to WiFi...");
-  // }
-  // Serial.println("Connected to WiFi");
+  // Connect to WiFi
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(100);
+    Serial.println("Connecting to WiFi...");
+  }
+  Serial.println("Connected to WiFi");
 
   M5.begin();
   M5.Lcd.fillScreen(BLACK);
@@ -105,9 +105,9 @@ void setup() {
 }
 
 void loop() {
-
   M5.update();
   currentMillis = millis();
+
   // Handle BtnA press
   if (M5.BtnA.wasPressed()) {
     handleBtnA();
@@ -129,16 +129,6 @@ void loop() {
     M5.Axp.ScreenBreath(30);
     screenDimmed = true;
   }
-
-  // // WiFi Scanning for nzyme & in general
-  // int n = WiFi.scanNetworks();
-  // for (int i = 0; i < n; ++i) {
-  //   String macAddr = WiFi.BSSIDstr(i);
-  //   int rssi = WiFi.RSSI(i);
-  //   if (trackDevice(macAddr.c_str(), rssi, currentTime, WiFi.SSID(i).c_str())) {
-  //     newTrackerFound = true;
-  //   }
-  // }
 
   // BT Scanning
   BLEScanResults foundDevices = pBLEScan->start(5, false);
@@ -163,7 +153,14 @@ void loop() {
   pBLEScan->clearResults();
   displayTrackedDevices();
   removeOldEntries(currentTime);
-  sendToNzyme(prepareNzymePayload());  // Send data to Nzyme
+
+  // Send data to Nzyme periodically
+  static unsigned long lastNzymeSendTime = 0;
+  if (currentMillis - lastNzymeSendTime > scanInterval) {
+    lastNzymeSendTime = currentMillis;
+    sendToNzyme(prepareNzymePayload());
+  }
+
   saveDeviceData();  // Save device data persistently
 }
 
@@ -475,12 +472,22 @@ String prepareNzymePayload() {
 }
 
 void sendToNzyme(const String &jsonPayload) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi not connected!");
+    return;
+  }
+
   if (!client.connect(nzyme_host, nzyme_port)) {
     Serial.println("Connection to Nzyme failed!");
     return;
   }
 
-  String request = String("POST ") + nzyme_path + " HTTP/1.1\r\n" + "Host: " + nzyme_host + "\r\n" + "Content-Type: application/json\r\n" + "Content-Length: " + jsonPayload.length() + "\r\n" + "Connection: close\r\n\r\n" + jsonPayload + "\r\n";
+  String request = String("POST ") + nzyme_path + " HTTP/1.1\r\n" + 
+                   "Host: " + nzyme_host + "\r\n" + 
+                   "Content-Type: application/json\r\n" + 
+                   "Content-Length: " + jsonPayload.length() + "\r\n" + 
+                   "Connection: close\r\n\r\n" + 
+                   jsonPayload + "\r\n";
 
   client.print(request);
 
