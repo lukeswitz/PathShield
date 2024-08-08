@@ -19,6 +19,7 @@
 #define STABILITY_THRESHOLD 10
 #define VARIATION_THRESHOLD 20
 #define IDLE_TIMEOUT 30000  // 30 seconds in milliseconds
+#define SENSITIVITY 5  // Example sensitivity value
 
 const char *ssid = "your_SSID";
 const char *password = "your_PASSWORD";
@@ -117,6 +118,9 @@ void loop() {
   if (M5.BtnB.wasPressed()) {
     handleBtnB();
   }
+
+  // Handle button combination for menu access
+  handleButtonCombination();
 
   if (paused) {
     delay(100);  // Small delay to avoid busy-waiting
@@ -217,6 +221,22 @@ void handleBtnB() {
       M5.Lcd.drawTriangle(120, 60 + i * 5, 110, 80 + i * 5, 130, 80 + i * 5, M5.Lcd.color565(255 - i * 50, 165 - i * 30, 0));
       delay(1150);
       displayTrackedDevices();
+    }
+  }
+  M5.Lcd.setTextSize(1);
+  // Remove the call to displayMenuScreen here
+}
+
+void handleButtonCombination() {
+  static bool inMenu = false;
+  if (M5.BtnA.isPressed() && M5.BtnB.isPressed()) {
+    if (inMenu) {
+      M5.Lcd.fillScreen(BLACK);
+      displayTrackedDevices();
+      inMenu = false;
+    } else {
+      displayMenuScreen();
+      inMenu = true;
     }
   }
 }
@@ -434,6 +454,53 @@ void displayTrackedDevices() {
       return;  // Stop if we reach the bottom of the screen
     }
   }
+}
+
+void displayMenuScreen() {
+    M5.Lcd.fillScreen(BLACK);
+    M5.Lcd.setCursor(5, 1);
+    M5.Lcd.setTextColor(GREEN);
+    M5.Lcd.setTextSize(2);
+    M5.Lcd.print("Menu");
+
+    M5.Lcd.setTextSize(1);
+    int y = 20;
+
+    // Display battery level
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Battery: ");
+    M5.Lcd.print(M5.Axp.GetBatVoltage());
+    M5.Lcd.print("V");
+    y += 12;
+
+    // Display brightness level
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Brightness: ");
+    M5.Lcd.print(highBrightness ? "High" : "Low");
+    y += 12;
+
+    // Display number of devices found
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Devices Found: ");
+    M5.Lcd.print(deviceIndex);
+    y += 12;
+
+    // Display sensitivity setting
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Sensitivity: ");
+    M5.Lcd.print(SENSITIVITY);  // Assuming SENSITIVITY is a defined constant
+    y += 12;
+
+    // Display other settings
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Other Settings: ");
+    y += 12;
+
+    // Add more settings as needed
+
+    // Add a "Back" option
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("Press BtnA + BtnB to go back");
 }
 
 void removeOldEntries(unsigned long currentTime) {
