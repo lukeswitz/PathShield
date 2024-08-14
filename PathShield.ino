@@ -23,14 +23,13 @@
 
 const char *ssid = "your_SSID";
 const char *password = "your_PASSWORD";
-const char *nzyme_host = "your_nzyme_host";
+const char *nzyme_host = "correct_nzyme_host";  // Update this to the correct Nzyme host
 const int nzyme_port = 443;
-const char *nzyme_path = "/api/your_endpoint";  // Adjust the path as per Nzyme docs
+const char *nzyme_path = "/api/correct_endpoint";  // Update this to the correct Nzyme endpoint path
 bool highBrightness = true;
 bool didTrigger = false;
 
 WiFiClientSecure client;
-
 struct DeviceInfo {
   String address;
   String name;
@@ -104,12 +103,16 @@ void setup() {
   }
 
   loadDeviceData();
+  setupClient();  // Call setupClient to handle self-signed certificates
+}
+
+void setupClient() {
+  client.setInsecure();  // Accept all certificates, including self-signed
 }
 
 void loop() {
   M5.update();
   currentMillis = millis();
-
   // Handle BtnA press
   if (M5.BtnA.wasPressed()) {
     handleBtnA();
@@ -534,10 +537,12 @@ void sendToNzyme(const String &jsonPayload) {
     return;
   }
 
+  Serial.println("Connecting to Nzyme...");
   if (!client.connect(nzyme_host, nzyme_port)) {
     Serial.println("Connection to Nzyme failed!");
     return;
   }
+  Serial.println("Connected to Nzyme");
 
   String request = String("POST ") + nzyme_path + " HTTP/1.1\r\n" + 
                    "Host: " + nzyme_host + "\r\n" + 
@@ -546,6 +551,8 @@ void sendToNzyme(const String &jsonPayload) {
                    "Connection: close\r\n\r\n" + 
                    jsonPayload + "\r\n";
 
+  Serial.println("Sending request to Nzyme:");
+  Serial.println(request);
   client.print(request);
 
   while (client.connected()) {
@@ -560,6 +567,7 @@ void sendToNzyme(const String &jsonPayload) {
   }
 
   client.stop();
+  Serial.println("Disconnected from Nzyme");
 }
 
 void saveDeviceData() {
