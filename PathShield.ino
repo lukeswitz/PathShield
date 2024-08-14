@@ -229,6 +229,8 @@ void handleBtnB() {
 
 void handleButtonCombination() {
   static bool inMenu = false;
+  static int menuIndex = 0;  // Track the current menu selection
+
   if (M5.BtnA.isPressed() && M5.BtnB.isPressed()) {
     if (inMenu) {
       M5.Lcd.fillScreen(BLACK);
@@ -237,6 +239,16 @@ void handleButtonCombination() {
     } else {
       displayMenuScreen();
       inMenu = true;
+    }
+  }
+
+  if (inMenu) {
+    if (M5.BtnA.wasPressed()) {
+      menuIndex = (menuIndex + 1) % 4;  // Cycle through menu options
+      displayMenuScreen();
+      highlightMenuOption(menuIndex);
+    } else if (M5.BtnB.wasPressed()) {
+      executeMenuOption(menuIndex);
     }
   }
 }
@@ -453,33 +465,49 @@ void displayMenuScreen() {
     M5.Lcd.print(SENSITIVITY);  // Assuming SENSITIVITY is a defined constant
     y += 12;
 
-    // Display other settings
+    // New menu options
     M5.Lcd.setCursor(2, y);
-    M5.Lcd.print("Other Settings: ");
+    M5.Lcd.print("1. WiFi On/Off");
     y += 12;
-
-    // Add more settings as needed
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("2. Nzyme On/Off");
+    y += 12;
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("3. Brightness");
+    y += 12;
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.print("4. Shutdown");
+    y += 12;
 
     // Add a "Back" option
     M5.Lcd.setCursor(2, y);
     M5.Lcd.print("Press BtnA + BtnB to go back");
 }
 
-void removeOldEntries(unsigned long currentTime) {
-  for (int i = 0; i < deviceIndex; i++) {
-    if (currentTime - trackedDevices[i].lastSeen > DETECTION_WINDOW) {
-      for (int j = i; j < deviceIndex - 1; j++) {
-        trackedDevices[j] = trackedDevices[j + 1];
-      }
-      deviceIndex--;
-      i--;
-    }
-  }
+void highlightMenuOption(int index) {
+    int y = 20 + 12 * (index + 4);  // Calculate the y position based on the index
+    M5.Lcd.setCursor(2, y);
+    M5.Lcd.setTextColor(YELLOW);
+    M5.Lcd.print(">");
 }
 
-String prepareNzymePayload() {
-  String payload = "{\"devices\":[";
-  for (int i = 0; i < deviceIndex; i++) {
+void executeMenuOption(int index) {
+    switch (index) {
+        case 0:
+            toggleWiFi();
+            break;
+        case 1:
+            toggleNzyme();
+            break;
+        case 2:
+            toggleBrightness();
+            break;
+        case 3:
+            shutdownDevice();
+            break;
+    }
+}
+
     if (i > 0) payload += ",";
     payload += "{";
     payload += "\"address\":\"" + trackedDevices[i].address + "\",";
@@ -569,4 +597,34 @@ void loadDeviceData() {
   }
 
   file.close();
+}
+
+void toggleWiFi() {
+    if (WiFi.status() == WL_CONNECTED) {
+        WiFi.disconnect();
+        Serial.println("WiFi turned off");
+    } else {
+        WiFi.begin(ssid, password);
+        while (WiFi.status() != WL_CONNECTED) {
+            delay(100);
+            Serial.println("Connecting to WiFi...");
+        }
+        Serial.println("WiFi turned on");
+    }
+}
+
+void toggleNzyme() {
+    // Implement Nzyme on/off logic here
+    // This is a placeholder
+    Serial.println("Nzyme toggled");
+}
+
+void toggleBrightness() {
+    highBrightness = !highBrightness;
+    M5.Axp.ScreenBreath(highBrightness ? 80 : 30);
+    Serial.println("Brightness toggled");
+}
+
+void shutdownDevice() {
+    M5.Axp.PowerOff();
 }
