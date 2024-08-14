@@ -23,9 +23,9 @@
 
 const char *ssid = "your_SSID";
 const char *password = "your_PASSWORD";
-const char *nzyme_host = "correct_nzyme_host";  // Update this to the correct Nzyme host
+const char *nzyme_host = "correct_nzyme_host";
 const int nzyme_port = 443;
-const char *nzyme_path = "/api/correct_endpoint";  // Update this to the correct Nzyme endpoint path
+const char *nzyme_path = "/api/correct_endpoint";
 bool highBrightness = true;
 bool didTrigger = false;
 
