@@ -10,6 +10,8 @@ class TestMacChecker(unittest.TestCase):
         self.assertTrue(is_special_mac("00:1A:2C:AA:BB:CC"))
         self.assertTrue(is_special_mac("00:1A:2B:CC:DD:EE"))
         self.assertTrue(is_special_mac("00:1A:2C:11:22:33"))
+        self.assertTrue(is_special_mac("00:1A:2B:CC:DD:EE"))
+        self.assertTrue(is_special_mac("00:1A:2C:11:22:33"))
 
     def test_non_special_mac(self):
         self.assertFalse(is_special_mac("00:1A:2D:00:00:03"))
