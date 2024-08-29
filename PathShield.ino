@@ -255,7 +255,7 @@ void handleButtonCombination() {
 
 bool isSpecialMac(const char *address) {
   for (int i = 0; i < sizeof(specialMacs) / sizeof(specialMacs[0]); i++) {
-    if (String(address).startsWith(specialMacs[i])) {
+    if (strncmp(address, specialMacs[i], strlen(specialMacs[i])) == 0) {
       return true;
     }
   }
@@ -315,7 +315,13 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime, const
       }
       trackedDevices[0] = { String(address), String(name), getManufacturer(address), 1, currentTime, rssi, 1, rssi, false, false, false, 0, 0, currentTime };
       deviceIndex++;
-      if (isSpecialMac(address) || (trackedDevices[0].count >= THRESHOLD_COUNT && trackedDevices[0].variationCount > THRESHOLD_COUNT)) {
+      if (isSpecialMac(address)) {
+        trackedDevices[0].detected = true;
+        trackedDevices[0].isSpecial = true;
+        trackedDevices[0].alertTriggered = true;  // Trigger alert only once
+        newTracker = true;
+      } else if (trackedDevices[0].count >= THRESHOLD_COUNT && trackedDevices[0].variationCount > THRESHOLD_COUNT) {
+        trackedDevices[0].detected = true;
         trackedDevices[0].alertTriggered = true;  // Trigger alert only once
         newTracker = true;
       }
