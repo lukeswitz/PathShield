@@ -4,12 +4,12 @@ from src.mac_checker import is_special_mac
 class TestMacChecker(unittest.TestCase):
 
     def test_special_mac(self):
-        self.assertTrue(is_special_mac("00:1A:2B:00:00:01"))
-        self.assertTrue(is_special_mac("00:1A:2C:00:00:02"))
-        self.assertTrue(is_special_mac("00:1A:2B:FF:FF:FF"))
-        self.assertTrue(is_special_mac("00:1A:2C:AA:BB:CC"))
-        self.assertTrue(is_special_mac("00:1A:2B:CC:DD:EE"))
-        self.assertTrue(is_special_mac("00:1A:2C:11:22:33"))
+        self.assertTrue(is_special_mac("00:25:DF:00:00:01"))
+        self.assertTrue(is_special_mac("20:3A:07:00:00:02"))
+        self.assertTrue(is_special_mac("34:DE:1A:FF:FF:FF"))
+        self.assertTrue(is_special_mac("44:65:0D:AA:BB:CC"))
+        self.assertTrue(is_special_mac("58:82:A8:CC:DD:EE"))
+        self.assertFalse(is_special_mac("00:1A:2B:00:00:01"))  # Not in specialMacs
 
     def test_non_special_mac(self):
         self.assertFalse(is_special_mac("00:1A:2D:00:00:03"))
