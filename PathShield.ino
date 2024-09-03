@@ -255,7 +255,7 @@ void handleButtonCombination() {
 
 bool isSpecialMac(const char *address) {
   for (int i = 0; i < sizeof(specialMacs) / sizeof(specialMacs[0]); i++) {
-    if (strncmp(address, specialMacs[i], 8) == 0) {  // Check only the first 8 characters
+    if (strncmp(address, specialMacs[i], strlen(specialMacs[i])) == 0) {  // Check the correct length of the prefix
       return true;
     }
   }
@@ -295,7 +295,7 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime, const
           newTracker = true;
         }
         moveToTop(i);
-      } else if (trackedDevices[i].count >= THRESHOLD_COUNT && trackedDevices[i].variationCount > THRESHOLD_COUNT) {
+      } else if (trackedDevices[i].count >= THRESHOLD_COUNT && trackedDevices[i].variationCount > VARIATION_THRESHOLD) {
         trackedDevices[i].detected = true;
         trackedDevices[i].isSpecial = false;
         if (!trackedDevices[i].alertTriggered) {
@@ -320,7 +320,7 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime, const
         trackedDevices[0].isSpecial = true;
         trackedDevices[0].alertTriggered = true;  // Trigger alert only once
         newTracker = true;
-      } else if (trackedDevices[0].count >= THRESHOLD_COUNT && trackedDevices[0].variationCount > THRESHOLD_COUNT) {
+      } else if (trackedDevices[0].count >= THRESHOLD_COUNT && trackedDevices[0].variationCount > VARIATION_THRESHOLD) {
         trackedDevices[0].detected = true;
         trackedDevices[0].alertTriggered = true;  // Trigger alert only once
         newTracker = true;
