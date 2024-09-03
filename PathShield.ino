@@ -255,7 +255,7 @@ void handleButtonCombination() {
 
 bool isSpecialMac(const char *address) {
   for (int i = 0; i < sizeof(specialMacs) / sizeof(specialMacs[0]); i++) {
-    if (strncmp(address, specialMacs[i], strlen(specialMacs[i])) == 0) {
+    if (strncmp(address, specialMacs[i], 8) == 0) {  // Check only the first 8 characters
       return true;
     }
   }
