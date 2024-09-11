@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <set>
 #include <SPIFFS.h>
+#include <SPI.h>
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 135
 #define THRESHOLD_COUNT 5
@@ -46,7 +47,7 @@ struct DeviceInfo {
   int stableRssiCount;
   int variationCount;
   int lastSeenTime;  // Add this line
-};
+};  // Add this closing brace
 
 
 DeviceInfo trackedDevices[MAX_DEVICES];
