@@ -822,7 +822,7 @@ void displayTrackedDevices() {
       
       M5.Lcd.setCursor(80, y);
       M5.Lcd.setTextColor(BLUE_GREY);
-      M5.Lcd.print(wifiDevices[i].bssid.substring(9));
+      M5.Lcd.print(wifiDevices[i].bssid);
       y += 11;
     }
   } else {
@@ -862,7 +862,7 @@ void displayTrackedDevices() {
       }
       
       if (device.isSpecial) {
-        M5.Lcd.setTextColor(BLUE);
+        M5.Lcd.setTextColor(ORANGE);
       } else if (device.detected) {
         M5.Lcd.setTextColor(RED);
       } else {

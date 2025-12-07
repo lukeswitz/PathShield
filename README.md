@@ -86,7 +86,7 @@ A+B hold:  Exit menu
 ### Color Codes
 ```
 CYAN    = WiFi access points / Normal BLE
-BLUE    = User defined tracker (special MAC)
+ORANGE  = User defined tracker (special MAC)
 RED     = Suspected tracker (persistence ≥ 0.65)
 YELLOW  = Manufacturer name
 ```
