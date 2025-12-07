@@ -775,10 +775,9 @@ void displayTrackedDevices() {
   int displayed = 0;
   const int maxDisplay = 3;
   
-  std::vector<DeviceInfo> allDevices;  // DECLARE HERE OUTSIDE IF BLOCK
+  std::vector<DeviceInfo> allDevices;
 
   if (scanningWiFi) {
-    // WiFi display code stays same
     for (int i = scrollIndex; i < wifiDeviceIndex && displayed < maxDisplay; i++, displayed++) {
       if (displayed > 0) {
         M5.Lcd.drawFastHLine(0, y - 2, SCREEN_WIDTH, BLUE_GREY);
@@ -798,8 +797,17 @@ void displayTrackedDevices() {
       M5.Lcd.setTextSize(1);
       M5.Lcd.setCursor(2, y);
       M5.Lcd.setTextColor(YELLOW);
-      M5.Lcd.print("Ch:");
+      String mfg = getManufacturer(wifiDevices[i].bssid.c_str());
+      if (mfg.length() > 30) {
+        mfg = mfg.substring(0, 27) + "...";
+      }
+      M5.Lcd.print(mfg);
+      y += 9;
+      
+      M5.Lcd.setTextSize(1);
+      M5.Lcd.setCursor(2, y);
       M5.Lcd.setTextColor(WHITE);
+      M5.Lcd.print("Ch");
       M5.Lcd.print(wifiDevices[i].channel);
       M5.Lcd.print(" ");
       M5.Lcd.setTextColor(GREEN);
@@ -810,23 +818,17 @@ void displayTrackedDevices() {
         case WIFI_AUTH_WPA2_PSK: M5.Lcd.print("WPA2"); break;
         default: M5.Lcd.print("WPA2"); break;
       }
-      y += 9;
-      
-      M5.Lcd.setTextSize(1);
-      M5.Lcd.setCursor(2, y);
+      M5.Lcd.print(" ");
       M5.Lcd.setTextColor(DARKGREY);
       M5.Lcd.print(wifiDevices[i].detectionCount);
       M5.Lcd.print("x ");
       M5.Lcd.print(wifiDevices[i].rssi);
-      M5.Lcd.print("dB");
-      
-      M5.Lcd.setCursor(80, y);
+      M5.Lcd.print("dB ");
       M5.Lcd.setTextColor(BLUE_GREY);
       M5.Lcd.print(wifiDevices[i].bssid);
       y += 11;
     }
   } else {
-    // BLE display
     std::vector<DeviceInfo> alertDevices;
     std::vector<DeviceInfo> normalDevices;
 
