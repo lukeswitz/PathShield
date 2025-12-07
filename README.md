@@ -1,6 +1,27 @@
-# PathShield
 
-Advanced BLE and WiFi tracker detection for M5StickC Plus. Detects AirTags, Tiles, and suspicious devices following you.
+# `PathShield M5`
+BLE and WiFi tracker detection for M5StickC Plus. Detects AirTags, Tiles, and any devices following you.
+
+> [!WARNING]
+> ETHICAL USE REQUIRED
+> This software processes data locally without external transmission. Users are
+> solely responsible for: Compliance with all applicable laws. Respecting reasonable expectations of privacy
+
+
+## Table of Contents
+
+1. [Features](#features)
+2. [Installation](#installation)
+3. [Controls](#controls)
+4. [Display Guide](#display-guide)
+5. [Detection Algorithm](#detection-algorithm)
+6. [Customization](#customization)
+7. [Troubleshooting](#troubleshooting)
+8. [Known Limitations](#known-limitations)
+9. [Credits](#credits)
+10. [License](#license)
+
+
 
 ## Features
 
@@ -11,8 +32,8 @@ Advanced BLE and WiFi tracker detection for M5StickC Plus. Detects AirTags, Tile
 
 ## Installation
 
-### Web Flasher (Recommended)
-[Install PathShield](https://lukeswitz.github.io/PathShield/)**
+### Web Flasher 
+[Install PathShield](https://lukeswitz.github.io/PathShield/)
 
 1. Open link in Chrome, Edge, or Opera (not Safari/Firefox)
 2. Connect M5StickC Plus via USB-C
@@ -20,7 +41,7 @@ Advanced BLE and WiFi tracker detection for M5StickC Plus. Detects AirTags, Tile
 4. Select serial port
 5. Wait ~2 minutes
 
-### Arduino IDE
+### From Source w/Arduino IDE
 
 1. Install M5StickCPlus library
 2. Board: **M5Stick-C-Plus**
@@ -31,7 +52,7 @@ Advanced BLE and WiFi tracker detection for M5StickC Plus. Detects AirTags, Tile
 
 ### Normal Mode
 ```
-Button A:     Pause/Resume scanning
+Button A:     Pause scanning
 Button B:     Toggle name filter
 A+B (hold):   Settings menu
 ```
@@ -48,6 +69,11 @@ Button B hold: Resume (hold 1 second)
 Button A:  Navigate options
 Button B:  Select option
 A+B hold:  Exit menu
+
+---Settings---
+- Brightness Low/High
+- Clear Devices
+- Shutdown Device
 ```
 
 ## Display Guide
@@ -60,23 +86,21 @@ A+B hold:  Exit menu
 ### Color Codes
 ```
 CYAN    = WiFi access points / Normal BLE
-BLUE    = Known tracker (special MAC)
+BLUE    = User defined tracker (special MAC)
 RED     = Suspected tracker (persistence ≥ 0.65)
 YELLOW  = Manufacturer name
-MAGENTA = Divider lines
-WHITE   = Detection counts, RSSI
 ```
 
 ### Device Information
 
-**BLE Devices (3 lines):**
+**BLE Devices:**
 ```
 Line 1: Device name (size 2 font)
 Line 2: Manufacturer from MAC lookup
 Line 3: Count/RSSI + MAC address
 ```
 
-**WiFi Devices (3 lines):**
+**WiFi Devices:**
 ```
 Line 1: SSID or "Hidden"
 Line 2: Channel + Encryption type
@@ -120,13 +144,22 @@ Line 3: Count/RSSI + BSSID (last 8 chars)
 Edit `specialMacs[]` in PathShield.ino:
 ```cpp
 const char *specialMacs[] = {
-  "4C:00:12",  // Apple AirTag
-  "C4:AC:05",  // Tile
-  "D3:00:FF",  // Tile (additional)
-  "E4:5F:01",  // Samsung SmartTag
-  "74:5C:4B",  // Samsung SmartTag+
-  "EC:81:93",  // Chipolo
-  "FF:FF:C0",  // Generic tracker pattern
+  // Apple OUIs (AirTags use rotating addresses from Apple's OUI space)
+  "AC:DE:48",  // Apple Inc.
+  "F0:98:9D",  // Apple Inc.
+  "BC:92:6B",  // Apple Inc.
+  
+  // Tile
+  "C4:AC:05",  // Tile Inc.
+  "E0:00:00",  // Tile Inc. (some models)
+  
+  // Samsung SmartTag
+  "E4:5F:01",  // Samsung Electronics
+  "74:5C:4B",  // Samsung Electronics
+  "E8:50:8B",  // Samsung Electronics (additional)
+  
+  // Chipolo
+  "EC:81:93",  // Chipolo d.o.o.
 };
 ```
 
@@ -234,18 +267,6 @@ esptool.py --port COM5 write_flash 0x290000 spiffs.bin
 - Wait 200ms between presses (debounce)
 - For menu: hold both buttons 300ms+
 
-## Technical Specifications
-```
-Scan Cycle:       WiFi 3s → BLE 3s (alternating)
-BLE Range:        ~30-50 meters
-WiFi Range:       ~50-100 meters
-Max Devices:      100 BLE + 50 WiFi
-Auto-Cleanup:     After 5 minutes
-Battery Life:     4-6 hours continuous
-Persistence Save: Every 60 seconds
-Display Refresh:  Every scan cycle
-```
-
 
 ## Known Limitations
 
@@ -264,7 +285,8 @@ Detection algorithms based on:
 
 ## License
 
-MIT License - Use at your own risk
+MIT License - Use at your own risk. Developers provide no warranty and accept no liability for unlawful or
+unethical use. Review local regulations before deployment.
 
 ## Contributing
 
