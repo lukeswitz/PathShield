@@ -1,11 +1,14 @@
+<div align="center">
+<img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/0dac6a9f-32a8-4b05-b6a1-b59fc3762f51" />
 
-# `PathShield M5`
 BLE and WiFi tracker detection for M5StickC Plus. Detects AirTags, Tiles, and any devices following you.
+</div>
+
+---
 
 > [!WARNING]
-> ETHICAL USE REQUIRED
-> This software processes data locally without external transmission. Users are
-> solely responsible for: Compliance with all applicable laws. Respecting reasonable expectations of privacy
+> ETHICAL USE ONLY:
+> This software processes data locally without external transmission. Users are solely responsible for: Compliance with all applicable laws. Respecting reasonable expectations of privacy
 
 
 ## Table of Contents
@@ -50,14 +53,14 @@ BLE and WiFi tracker detection for M5StickC Plus. Detects AirTags, Tiles, and an
 
 ## Controls
 
-### Normal Mode
+### Normal Scanning Mode
 ```
 Button A:     Pause scanning
 Button B:     Toggle name filter
 A+B (hold):   Settings menu
 ```
 
-### Paused Mode
+### Paused 
 ```
 Button A:      Scroll up
 Button B:      Scroll down (tap)
@@ -104,7 +107,7 @@ Line 3: Count/RSSI + MAC address
 ```
 Line 1: SSID or "Hidden"
 Line 2: Channel + Encryption type
-Line 3: Count/RSSI + BSSID (last 8 chars)
+Line 3: Count/RSSI + MAC address
 ```
 
 ### Footer
