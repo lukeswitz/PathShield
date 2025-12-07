@@ -2,6 +2,9 @@
 # `PathShield M5`
 BLE and WiFi tracker detection for M5StickC Plus. Detects AirTags, Tiles, and devices following you.
 
+<img width="1024" height="776" alt="image" src="https://github.com/user-attachments/assets/cc6ffe15-b427-4e7e-a004-86e2879a05a8" />
+
+
 
 ## Contents
 
