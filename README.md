@@ -11,6 +11,9 @@ PathShield is an RF awareness tool for M5StickC Plus- It uses BLE & WiFI scannin
 
 This software processes data locally without external transmission. Users are solely responsible for: Compliance with all applicable laws. Respecting reasonable expectations of privacy
 
+> [!NOTE]
+> Change the `specialMacs` to your own target devices, or use as is: detects Flock and Axon Taser cameras.  
+
 
 ## Table of Contents
 
