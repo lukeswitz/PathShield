@@ -6,13 +6,9 @@ PathShield is an RF awareness tool for M5StickC Plus- It uses BLE & WiFI scannin
 
 ---
 
-> [!WARNING]
+> [!CAUTION]
 > **ETHICAL USE ONLY**
-
-This software processes data locally without external transmission. Users are solely responsible for: Compliance with all applicable laws. Respecting reasonable expectations of privacy
-
-> [!NOTE]
-> Change the `specialMacs` to your own target devices, or use as is: detects Flock and Axon Taser cameras.  
+> Users are solely responsible for: Compliance with all applicable laws. Respecting reasonable expectations of privacy
 
 
 ## Table of Contents
@@ -37,6 +33,9 @@ This software processes data locally without external transmission. Users are so
 - **Real-Time Alerts**: Visual notifications for detected trackers and user specified MAC targets
 - **5000+ MAC Database**: Automatic offline manufacturer identification
 
+> [!NOTE]
+> Change the `specialMacs` to your own target devices, or use as is: detects Flock and Axon Taser cameras.  
+
 ## Installation
 
 ### Web Flasher 
@@ -46,7 +45,7 @@ This software processes data locally without external transmission. Users are so
 2. Connect M5StickC Plus via USB-C
 3. Click "Deploy Firmware"
 4. Select serial port
-5. Wait ~2 minutes
+5. Wait ~2 minutes for it to complete
 
 ### From Source w/Arduino IDE
 
@@ -54,6 +53,7 @@ This software processes data locally without external transmission. Users are so
 2. Board: **M5Stick-C-Plus**
 3. Partition: **Huge APP (3MB No OTA/1MB SPIFFS)**
 4. Upload sketch
+
 
 ## Controls
 
@@ -207,6 +207,8 @@ M5.Lcd.drawFastHLine(0, 0, SCREEN_WIDTH, MAGENTA);  // Border color
 ```
 
 ## Troubleshooting
+
+> Tested with M5stickCPlusv1. Support for more devices can be requested by opening a ticket
 
 ### No Alerts for Known Tracker
 
