@@ -1,4 +1,4 @@
-#include <M5StickCPlus.h>
+#include <M5Unified.h>
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEScan.h>
@@ -65,6 +65,11 @@ const unsigned long SCAN_SWITCH_INTERVAL = 3000;
 // Privacy Invader Defaults: Axon cameras, Liteon Technology (Flock), Utility Inc (Flock)
 const char *specialMacs[] = {
   "00:25:DF", "14:5A:FC", "00:09:BC"
+};
+
+// Allowlist: Trusted devices that should never trigger alerts (add your own MAC prefixes)
+const char *allowlistMacs[] = {
+  // Example: "AA:BB:CC" - add your trusted device MAC prefixes here
 };
 
 struct TimeWindow {
@@ -146,11 +151,11 @@ void removeOldWiFiEntries(unsigned long currentTime) {
 void setup() {
   Serial.begin(115200);
   M5.begin();
-  M5.Lcd.fillScreen(BLACK);
-  M5.Lcd.setRotation(3);
-  M5.Lcd.setTextColor(GREEN);
-  M5.Lcd.setTextSize(1);
-  M5.Axp.ScreenBreath(80);
+  M5.Display.fillScreen(BLACK);
+  M5.Display.setRotation(3);
+  M5.Display.setTextColor(GREEN);
+  M5.Display.setTextSize(1);
+  M5.Display.setBrightness(204); // 80/100 * 255
 
   BLEDevice::init("");
   pBLEScan = BLEDevice::getScan();
@@ -201,7 +206,7 @@ void loop() {
 
   if (currentMillis - lastButtonPressTime > IDLE_TIMEOUT && highBrightness) {
     highBrightness = false;
-    M5.Axp.ScreenBreath(30);
+    M5.Display.setBrightness(77); // 30/100 * 255
     screenDimmed = true;
   }
 
@@ -236,8 +241,9 @@ void loop() {
       for (int i = 0; i < foundDevicesPtr->getCount(); i++) {
         BLEAdvertisedDevice device = foundDevicesPtr->getDevice(i);
         String macAddr = device.getAddress().toString().c_str();
-        
-        if (ignoreList.find(macAddr) == ignoreList.end()) {
+
+        // Skip if in allowlist or ignore list
+        if (ignoreList.find(macAddr) == ignoreList.end() && !isAllowlistedMac(macAddr.c_str())) {
           if (trackDevice(macAddr.c_str(), device.getRSSI(), currentTime, device.getName().c_str())) {
             newTrackerFound = true;
           }
@@ -268,75 +274,75 @@ void loop() {
 }
 
 void displayStartupMessage() {
-  M5.Lcd.fillScreen(BLACK);
+  M5.Display.fillScreen(BLACK);
   
   for (int i = 0; i < 20; i++) {
     int x = random(0, SCREEN_WIDTH);
     int y = random(0, SCREEN_HEIGHT);
     int w = random(5, 40);
-    M5.Lcd.drawFastHLine(x, y, w, random(0x0000, 0x1111));
+    M5.Display.drawFastHLine(x, y, w, random(0x0000, 0x1111));
   }
   
-  M5.Lcd.drawFastHLine(0, 20, SCREEN_WIDTH, CYAN);
-  M5.Lcd.drawFastHLine(0, 21, SCREEN_WIDTH, CYAN);
+  M5.Display.drawFastHLine(0, 20, SCREEN_WIDTH, CYAN);
+  M5.Display.drawFastHLine(0, 21, SCREEN_WIDTH, CYAN);
   
-  M5.Lcd.setTextSize(3);
-  M5.Lcd.setTextColor(CYAN);
-  M5.Lcd.setCursor(15, 30);
-  M5.Lcd.print("PATH");
-  M5.Lcd.setTextColor(MAGENTA);
-  M5.Lcd.print("SHIELD");
+  M5.Display.setTextSize(3);
+  M5.Display.setTextColor(CYAN);
+  M5.Display.setCursor(15, 30);
+  M5.Display.print("PATH");
+  M5.Display.setTextColor(MAGENTA);
+  M5.Display.print("SHIELD");
   
-  M5.Lcd.setTextColor(0x07E0);
-  M5.Lcd.setCursor(16, 31);
-  M5.Lcd.print("PATH");
+  M5.Display.setTextColor(0x07E0);
+  M5.Display.setCursor(16, 31);
+  M5.Display.print("PATH");
   
-  M5.Lcd.setTextSize(1);
-  M5.Lcd.setTextColor(YELLOW);
-  M5.Lcd.setCursor(50, 60);
-  M5.Lcd.print("TRACKER DETECTION");
+  M5.Display.setTextSize(1);
+  M5.Display.setTextColor(YELLOW);
+  M5.Display.setCursor(50, 60);
+  M5.Display.print("TRACKER DETECTION");
   
-  M5.Lcd.setTextColor(DARKGREY);
-  M5.Lcd.setCursor(85, 72);
-  M5.Lcd.print("v2.0");
+  M5.Display.setTextColor(DARKGREY);
+  M5.Display.setCursor(85, 72);
+  M5.Display.print("v2.0");
   
-  M5.Lcd.drawFastHLine(0, 85, SCREEN_WIDTH, MAGENTA);
+  M5.Display.drawFastHLine(0, 85, SCREEN_WIDTH, MAGENTA);
   
-  M5.Lcd.setTextSize(1);
-  M5.Lcd.setTextColor(GREEN);
+  M5.Display.setTextSize(1);
+  M5.Display.setTextColor(GREEN);
   
-  M5.Lcd.setCursor(10, 95);
-  M5.Lcd.print("> Initializing BLE/WiFi");
+  M5.Display.setCursor(10, 95);
+  M5.Display.print("> Initializing BLE/WiFi");
   delay(400);
   
-  M5.Lcd.setCursor(190, 95);
-  M5.Lcd.setTextColor(CYAN);
-  M5.Lcd.print("[OK]");
+  M5.Display.setCursor(190, 95);
+  M5.Display.setTextColor(CYAN);
+  M5.Display.print("[OK]");
   delay(300);
   
-  M5.Lcd.setTextColor(GREEN);
-  M5.Lcd.setCursor(10, 107);
-  M5.Lcd.print("> Loading SPIFFS");
+  M5.Display.setTextColor(GREEN);
+  M5.Display.setCursor(10, 107);
+  M5.Display.print("> Loading SPIFFS");
   delay(400);
   
-  M5.Lcd.setCursor(190, 107);
-  M5.Lcd.setTextColor(CYAN);
-  M5.Lcd.print("[OK]");
+  M5.Display.setCursor(190, 107);
+  M5.Display.setTextColor(CYAN);
+  M5.Display.print("[OK]");
   delay(300);
   
-  M5.Lcd.setTextColor(GREEN);
-  M5.Lcd.setCursor(10, 119);
-  M5.Lcd.print("> System Ready");
+  M5.Display.setTextColor(GREEN);
+  M5.Display.setCursor(10, 119);
+  M5.Display.print("> System Ready");
   delay(300);
   
-  M5.Lcd.setCursor(190, 119);
-  M5.Lcd.setTextColor(CYAN);
-  M5.Lcd.print("[OK]");
+  M5.Display.setCursor(190, 119);
+  M5.Display.setTextColor(CYAN);
+  M5.Display.print("[OK]");
   
   delay(400);
-  M5.Lcd.fillScreen(CYAN);
+  M5.Display.fillScreen(CYAN);
   delay(50);
-  M5.Lcd.fillScreen(BLACK);
+  M5.Display.fillScreen(BLACK);
   delay(50);
 }
 
@@ -358,7 +364,7 @@ void handleBtnA() {
   
   if (screenDimmed) {
     highBrightness = true;
-    M5.Axp.ScreenBreath(80);
+    M5.Display.setBrightness(204); // 80/100 * 255
     screenDimmed = false;
     displayTrackedDevices();
     return;
@@ -375,15 +381,15 @@ void handleBtnA() {
     paused = true;
     scrollIndex = 0;
     
-    M5.Lcd.fillScreen(BLACK);
-    M5.Lcd.setTextSize(3);
-    M5.Lcd.setTextColor(RED);
-    M5.Lcd.setCursor(50, 50);
-    M5.Lcd.print("PAUSED");
-    M5.Lcd.setTextSize(1);
-    M5.Lcd.setCursor(20, 90);
-    M5.Lcd.setTextColor(WHITE);
-    M5.Lcd.print("Hold B to Resume");
+    M5.Display.fillScreen(BLACK);
+    M5.Display.setTextSize(3);
+    M5.Display.setTextColor(RED);
+    M5.Display.setCursor(50, 50);
+    M5.Display.print("PAUSED");
+    M5.Display.setTextSize(1);
+    M5.Display.setCursor(20, 90);
+    M5.Display.setTextColor(WHITE);
+    M5.Display.print("Hold B to Resume");
     delay(1500);
     displayTrackedDevices();
   }
@@ -393,7 +399,7 @@ void handleBtnB() {
   
   if (screenDimmed) {
     highBrightness = true;
-    M5.Axp.ScreenBreath(80);
+    M5.Display.setBrightness(204); // 80/100 * 255
     screenDimmed = false;
     displayTrackedDevices();
     return;
@@ -413,12 +419,12 @@ void handleBtnB() {
       // Held for 1 second - RESUME
       paused = false;
       scrollIndex = 0;
-      M5.Lcd.fillScreen(BLACK);
-      M5.Lcd.setTextSize(3);
-      M5.Lcd.setTextColor(GREEN);
-      M5.Lcd.setCursor(30, 50);
-      M5.Lcd.print("RESUMED");
-      M5.Lcd.setTextSize(1);
+      M5.Display.fillScreen(BLACK);
+      M5.Display.setTextSize(3);
+      M5.Display.setTextColor(GREEN);
+      M5.Display.setCursor(30, 50);
+      M5.Display.print("RESUMED");
+      M5.Display.setTextSize(1);
       delay(800);
       displayTrackedDevices();
     } else if (M5.BtnB.isPressed() == false) {
@@ -433,17 +439,17 @@ void handleBtnB() {
     // Toggle filter
     filterByName = !filterByName;
     
-    M5.Lcd.fillScreen(BLACK);
-    M5.Lcd.setTextSize(2);
-    M5.Lcd.setCursor(30, 50);
+    M5.Display.fillScreen(BLACK);
+    M5.Display.setTextSize(2);
+    M5.Display.setCursor(30, 50);
     if (filterByName) {
-      M5.Lcd.setTextColor(BLUE);
-      M5.Lcd.print("Named Only");
+      M5.Display.setTextColor(BLUE);
+      M5.Display.print("Named Only");
     } else {
-      M5.Lcd.setTextColor(ORANGE);
-      M5.Lcd.print("Show All");
+      M5.Display.setTextColor(ORANGE);
+      M5.Display.print("Show All");
     }
-    M5.Lcd.setTextSize(1);
+    M5.Display.setTextSize(1);
     delay(800);
     displayTrackedDevices();
   }
@@ -476,7 +482,7 @@ void handleButtonCombination() {
           delay(10);
         }
         inMenu = false;
-        M5.Lcd.fillScreen(BLACK);
+        M5.Display.fillScreen(BLACK);
         displayTrackedDevices();
         break;
       }
@@ -501,6 +507,15 @@ void handleButtonCombination() {
 bool isSpecialMac(const char *address) {
   for (int i = 0; i < sizeof(specialMacs) / sizeof(specialMacs[0]); i++) {
     if (String(address).startsWith(specialMacs[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool isAllowlistedMac(const char *address) {
+  for (int i = 0; i < sizeof(allowlistMacs) / sizeof(allowlistMacs[0]); i++) {
+    if (String(address).startsWith(allowlistMacs[i])) {
       return true;
     }
   }
@@ -695,81 +710,81 @@ void moveToTop(int index) {
 void alertUser(bool isSpecial, const String &name, const String &mac, float persistence) {
   if (isSpecial) {
     for (int i = 0; i < 5; i++) {
-      M5.Lcd.fillScreen(RED);
+      M5.Display.fillScreen(RED);
       delay(200);
-      M5.Lcd.fillScreen(BLUE);
+      M5.Display.fillScreen(BLUE);
       delay(200);
     }
   } else {
-    M5.Lcd.fillScreen(RED);
+    M5.Display.fillScreen(RED);
   }
 
-  M5.Lcd.setCursor(0, 10);
-  M5.Lcd.setTextColor(WHITE);
-  M5.Lcd.setTextSize(2);
-  M5.Lcd.print("Tracker Detected!");
-  M5.Lcd.setTextSize(1);
+  M5.Display.setCursor(0, 10);
+  M5.Display.setTextColor(WHITE);
+  M5.Display.setTextSize(2);
+  M5.Display.print("Tracker Detected!");
+  M5.Display.setTextSize(1);
   
-  M5.Lcd.setCursor(0, 40);
-  M5.Lcd.print("Type: ");
-  M5.Lcd.print(isSpecial ? "KNOWN" : "SUSPECTED");
+  M5.Display.setCursor(0, 40);
+  M5.Display.print("Type: ");
+  M5.Display.print(isSpecial ? "KNOWN" : "SUSPECTED");
   
-  M5.Lcd.setCursor(0, 55);
-  M5.Lcd.print("Name: ");
-  M5.Lcd.print(name.length() > 0 ? name : "Unknown");
+  M5.Display.setCursor(0, 55);
+  M5.Display.print("Name: ");
+  M5.Display.print(name.length() > 0 ? name : "Unknown");
   
-  M5.Lcd.setCursor(0, 70);
-  M5.Lcd.print("MAC: ");
-  M5.Lcd.print(mac);
+  M5.Display.setCursor(0, 70);
+  M5.Display.print("MAC: ");
+  M5.Display.print(mac);
   
-  M5.Lcd.setCursor(0, 85);
-  M5.Lcd.print("Score: ");
-  M5.Lcd.print(persistence, 2);
+  M5.Display.setCursor(0, 85);
+  M5.Display.print("Score: ");
+  M5.Display.print(persistence, 2);
   
-  M5.Lcd.setCursor(0, 105);
-  M5.Lcd.setTextColor(YELLOW);
-  M5.Lcd.print("Press any button");
+  M5.Display.setCursor(0, 105);
+  M5.Display.setTextColor(YELLOW);
+  M5.Display.print("Press any button");
   
   while (!M5.BtnA.wasPressed() && !M5.BtnB.wasPressed()) {
     M5.update();
     delay(50);
   }
   
-  M5.Lcd.setTextColor(WHITE);
-  M5.Lcd.setTextSize(1);
+  M5.Display.setTextColor(WHITE);
+  M5.Display.setTextSize(1);
 }
 
 void displayTrackedDevices() {
-  M5.Lcd.fillScreen(BLACK);
+  M5.Display.fillScreen(BLACK);
   
-  M5.Lcd.drawFastHLine(0, 0, SCREEN_WIDTH, CYAN);
-  M5.Lcd.drawFastHLine(0, 1, SCREEN_WIDTH, CYAN);
+  M5.Display.drawFastHLine(0, 0, SCREEN_WIDTH, CYAN);
+  M5.Display.drawFastHLine(0, 1, SCREEN_WIDTH, CYAN);
   
-  M5.Lcd.setTextSize(1);
-  M5.Lcd.setCursor(4, 3);
-  M5.Lcd.setTextColor(paused ? RED : GREEN);
-  M5.Lcd.print(paused ? "PAUSE" : (scanningWiFi ? "WiFi" : "BLE"));
+  M5.Display.setTextSize(1);
+  M5.Display.setCursor(4, 3);
+  M5.Display.setTextColor(paused ? RED : GREEN);
+  M5.Display.print(paused ? "PAUSE" : (scanningWiFi ? "WiFi" : "BLE"));
   
-  M5.Lcd.setCursor(60, 3);
-  M5.Lcd.setTextColor(BLUE_GREY);
+  M5.Display.setCursor(60, 3);
+  M5.Display.setTextColor(BLUE_GREY);
   if (scanningWiFi) {
-    M5.Lcd.print("APs:");
-    M5.Lcd.setTextColor(CYAN);
-    M5.Lcd.print(wifiDeviceIndex);
+    M5.Display.print("APs:");
+    M5.Display.setTextColor(CYAN);
+    M5.Display.print(wifiDeviceIndex);
   } else {
-    M5.Lcd.print("DEV:");
-    M5.Lcd.setTextColor(CYAN);
-    M5.Lcd.print(deviceIndex);
+    M5.Display.print("DEV:");
+    M5.Display.setTextColor(CYAN);
+    M5.Display.print(deviceIndex);
   }
 
   if (filterByName) {
-    M5.Lcd.setCursor(190, 3);
-    M5.Lcd.setTextColor(BLUE);
-    M5.Lcd.print("[F]");
+    M5.Display.setCursor(190, 3);
+    M5.Display.setTextColor(BLUE);
+    M5.Display.print("[F]");
   }
   
-  M5.Lcd.drawFastHLine(0, 11, SCREEN_WIDTH, CYAN);
-  M5.Lcd.drawFastHLine(0, 12, SCREEN_WIDTH, CYAN);
+  M5.Display.drawFastHLine(0, 11, SCREEN_WIDTH, CYAN);
+  M5.Display.drawFastHLine(0, 12, SCREEN_WIDTH, CYAN);
 
   int y = 15;
   int displayed = 0;
@@ -780,52 +795,59 @@ void displayTrackedDevices() {
   if (scanningWiFi) {
     for (int i = scrollIndex; i < wifiDeviceIndex && displayed < maxDisplay; i++, displayed++) {
       if (displayed > 0) {
-        M5.Lcd.drawFastHLine(0, y - 2, SCREEN_WIDTH, BLUE_GREY);
+        M5.Display.drawFastHLine(0, y - 2, SCREEN_WIDTH, BLUE_GREY);
         y += 1;
       }
       
-      M5.Lcd.setTextColor(CYAN);
-      M5.Lcd.setTextSize(2);
-      M5.Lcd.setCursor(2, y);
+      M5.Display.setTextColor(CYAN);
+      M5.Display.setTextSize(2);
+      M5.Display.setCursor(2, y);
       String ssid = wifiDevices[i].ssid.length() > 0 ? wifiDevices[i].ssid : "Hidden";
       if (ssid.length() > 19) {
         ssid = ssid.substring(0, 16) + "...";
       }
-      M5.Lcd.print(ssid);
+      M5.Display.print(ssid);
       y += 17;
       
-      M5.Lcd.setTextSize(1);
-      M5.Lcd.setCursor(2, y);
-      M5.Lcd.setTextColor(YELLOW);
+      M5.Display.setTextSize(1);
+      M5.Display.setCursor(2, y);
+      M5.Display.setTextColor(YELLOW);
       String mfg = getManufacturer(wifiDevices[i].bssid.c_str());
       if (mfg.length() > 30) {
         mfg = mfg.substring(0, 27) + "...";
       }
-      M5.Lcd.print(mfg);
+      M5.Display.print(mfg);
       y += 9;
       
-      M5.Lcd.setTextSize(1);
-      M5.Lcd.setCursor(2, y);
-      M5.Lcd.setTextColor(WHITE);
-      M5.Lcd.print("Ch");
-      M5.Lcd.print(wifiDevices[i].channel);
-      M5.Lcd.print(" ");
-      M5.Lcd.setTextColor(GREEN);
+      M5.Display.setTextSize(1);
+      M5.Display.setCursor(2, y);
+      M5.Display.setTextColor(WHITE);
+      M5.Display.print("Ch");
+      M5.Display.print(wifiDevices[i].channel);
+      M5.Display.print(" ");
+      M5.Display.setTextColor(GREEN);
       switch(wifiDevices[i].encryptionType) {
-        case WIFI_AUTH_OPEN: M5.Lcd.print("OPEN"); break;
-        case WIFI_AUTH_WEP: M5.Lcd.print("WEP"); break;
-        case WIFI_AUTH_WPA_PSK: M5.Lcd.print("WPA"); break;
-        case WIFI_AUTH_WPA2_PSK: M5.Lcd.print("WPA2"); break;
-        default: M5.Lcd.print("WPA2"); break;
+        case WIFI_AUTH_OPEN: M5.Display.print("OPEN"); break;
+        case WIFI_AUTH_WEP: M5.Display.print("WEP"); break;
+        case WIFI_AUTH_WPA_PSK: M5.Display.print("WPA"); break;
+        case WIFI_AUTH_WPA2_PSK: M5.Display.print("WPA2"); break;
+        case WIFI_AUTH_WPA_WPA2_PSK: M5.Display.print("WPA/2"); break;
+        case WIFI_AUTH_WPA2_ENTERPRISE: M5.Display.print("WPA2-E"); break;
+        case WIFI_AUTH_WPA3_PSK: M5.Display.print("WPA3"); break;
+        case WIFI_AUTH_WPA2_WPA3_PSK: M5.Display.print("WPA2/3"); break;
+        case WIFI_AUTH_WAPI_PSK: M5.Display.print("WAPI"); break;
+        case WIFI_AUTH_OWE: M5.Display.print("OWE"); break;
+        case WIFI_AUTH_WPA3_ENT_192: M5.Display.print("WPA3-E"); break;
+        default: M5.Display.print("UNK"); break;
       }
-      M5.Lcd.print(" ");
-      M5.Lcd.setTextColor(DARKGREY);
-      M5.Lcd.print(wifiDevices[i].detectionCount);
-      M5.Lcd.print("x ");
-      M5.Lcd.print(wifiDevices[i].rssi);
-      M5.Lcd.print("dB ");
-      M5.Lcd.setTextColor(BLUE_GREY);
-      M5.Lcd.print(wifiDevices[i].bssid);
+      M5.Display.print(" ");
+      M5.Display.setTextColor(DARKGREY);
+      M5.Display.print(wifiDevices[i].detectionCount);
+      M5.Display.print("x ");
+      M5.Display.print(wifiDevices[i].rssi);
+      M5.Display.print("dB ");
+      M5.Display.setTextColor(BLUE_GREY);
+      M5.Display.print(wifiDevices[i].bssid);
       y += 11;
     }
   } else {
@@ -859,155 +881,155 @@ void displayTrackedDevices() {
       const auto &device = allDevices[i];
       
       if (displayed > 0) {
-        M5.Lcd.drawFastHLine(0, y - 2, SCREEN_WIDTH, BLUE_GREY);
+        M5.Display.drawFastHLine(0, y - 2, SCREEN_WIDTH, BLUE_GREY);
         y += 1;
       }
       
       if (device.isSpecial) {
-        M5.Lcd.setTextColor(ORANGE);
+        M5.Display.setTextColor(ORANGE);
       } else if (device.detected) {
-        M5.Lcd.setTextColor(RED);
+        M5.Display.setTextColor(RED);
       } else {
-        M5.Lcd.setTextColor(CYAN);
+        M5.Display.setTextColor(CYAN);
       }
       
-      M5.Lcd.setTextSize(2);
-      M5.Lcd.setCursor(2, y);
+      M5.Display.setTextSize(2);
+      M5.Display.setCursor(2, y);
       
       String displayName = (device.name.length() > 0) ? device.name : "Unknown";
       if (displayName.length() > 19) {
         displayName = displayName.substring(0, 16) + "...";
       }
-      M5.Lcd.print(displayName);
+      M5.Display.print(displayName);
       y += 17;
       
-      M5.Lcd.setTextSize(1);
-      M5.Lcd.setCursor(2, y);
-      M5.Lcd.setTextColor(YELLOW);
+      M5.Display.setTextSize(1);
+      M5.Display.setCursor(2, y);
+      M5.Display.setTextColor(YELLOW);
       
       String mfg = device.manufacturer;
       if (mfg.length() > 30) {
         mfg = mfg.substring(0, 27) + "...";
       }
-      M5.Lcd.print(mfg);
+      M5.Display.print(mfg);
       y += 9;
       
-      M5.Lcd.setTextSize(1);
-      M5.Lcd.setCursor(2, y);
+      M5.Display.setTextSize(1);
+      M5.Display.setCursor(2, y);
       
       if (device.detected) {
-        M5.Lcd.setTextColor(RED);
-        M5.Lcd.print("!");
-        M5.Lcd.setTextColor(YELLOW);
-        M5.Lcd.print(device.persistenceScore, 2);
+        M5.Display.setTextColor(RED);
+        M5.Display.print("!");
+        M5.Display.setTextColor(YELLOW);
+        M5.Display.print(device.persistenceScore, 2);
       } else {
-        M5.Lcd.setTextColor(WHITE);
-        M5.Lcd.print(device.totalCount);
-        M5.Lcd.print("x ");
-        M5.Lcd.print(device.lastRssi);
-        M5.Lcd.print("dB");
+        M5.Display.setTextColor(WHITE);
+        M5.Display.print(device.totalCount);
+        M5.Display.print("x ");
+        M5.Display.print(device.lastRssi);
+        M5.Display.print("dB");
       }
       
-      M5.Lcd.setCursor(80, y);
-      M5.Lcd.setTextColor(BLUE_GREY);
-      M5.Lcd.print(device.address);
+      M5.Display.setCursor(80, y);
+      M5.Display.setTextColor(BLUE_GREY);
+      M5.Display.print(device.address);
       y += 11;
     }
   }
   
-  M5.Lcd.drawFastHLine(0, 133, SCREEN_WIDTH, CYAN);
-  M5.Lcd.drawFastHLine(0, 134, SCREEN_WIDTH, CYAN);
+  M5.Display.drawFastHLine(0, 133, SCREEN_WIDTH, CYAN);
+  M5.Display.drawFastHLine(0, 134, SCREEN_WIDTH, CYAN);
   
   int total = scanningWiFi ? wifiDeviceIndex : (int)allDevices.size();
   if (total > 0) {
-    M5.Lcd.setTextSize(1);
-    M5.Lcd.setTextColor(YELLOW);
-    M5.Lcd.setCursor(2, 124);
+    M5.Display.setTextSize(1);
+    M5.Display.setTextColor(YELLOW);
+    M5.Display.setCursor(2, 124);
     
     int showing = min(maxDisplay, total - scrollIndex);
-    M5.Lcd.print(scrollIndex + 1);
-    M5.Lcd.print("-");
-    M5.Lcd.print(scrollIndex + showing);
-    M5.Lcd.print("/");
-    M5.Lcd.print(total);
+    M5.Display.print(scrollIndex + 1);
+    M5.Display.print("-");
+    M5.Display.print(scrollIndex + showing);
+    M5.Display.print("/");
+    M5.Display.print(total);
     
     if (paused && total > maxDisplay) {
-      M5.Lcd.setCursor(80, 124);
-      M5.Lcd.setTextColor(GREEN);
-      M5.Lcd.print("A/B:Scroll");
+      M5.Display.setCursor(80, 124);
+      M5.Display.setTextColor(GREEN);
+      M5.Display.print("A/B:Scroll");
     }
   }
 }
 
 void displayMenuScreen() {
-  M5.Lcd.fillScreen(BLACK);
-  M5.Lcd.setCursor(2, 2);
-  M5.Lcd.setTextColor(GREEN);
-  M5.Lcd.setTextSize(1);
-  M5.Lcd.print("SETTINGS");
+  M5.Display.fillScreen(BLACK);
+  M5.Display.setCursor(2, 2);
+  M5.Display.setTextColor(GREEN);
+  M5.Display.setTextSize(1);
+  M5.Display.print("SETTINGS");
   
-  M5.Lcd.drawLine(0, 12, SCREEN_WIDTH, 12, DARKGREY);
+  M5.Display.drawLine(0, 12, SCREEN_WIDTH, 12, DARKGREY);
 
   int y = 16;
 
-  M5.Lcd.setTextColor(WHITE);
-  M5.Lcd.setCursor(2, y);
-  M5.Lcd.print("Battery: ");
-  float batVoltage = M5.Axp.GetBatVoltage();
-  M5.Lcd.print(batVoltage, 2);
-  M5.Lcd.print("V");
+  M5.Display.setTextColor(WHITE);
+  M5.Display.setCursor(2, y);
+  M5.Display.print("Battery: ");
+  float batVoltage = M5.Power.getBatteryVoltage() / 1000.0; // Convert mV to V
+  M5.Display.print(batVoltage, 2);
+  M5.Display.print("V");
   
   int batPercent = (int)((batVoltage - 3.0) / 1.2 * 100.0);
   if (batPercent > 100) batPercent = 100;
   if (batPercent < 0) batPercent = 0;
-  M5.Lcd.print(" (");
-  M5.Lcd.print(batPercent);
-  M5.Lcd.print("%)");
+  M5.Display.print(" (");
+  M5.Display.print(batPercent);
+  M5.Display.print("%)");
   y += 12;
 
-  M5.Lcd.setCursor(2, y);
-  M5.Lcd.print("Brightness: ");
-  M5.Lcd.print(highBrightness ? "High" : "Low");
+  M5.Display.setCursor(2, y);
+  M5.Display.print("Brightness: ");
+  M5.Display.print(highBrightness ? "High" : "Low");
   y += 12;
 
-  M5.Lcd.setCursor(2, y);
-  M5.Lcd.print("Tracked: ");
-  M5.Lcd.print(deviceIndex);
-  M5.Lcd.print("  Ignored: ");
-  M5.Lcd.print(ignoreList.size());
+  M5.Display.setCursor(2, y);
+  M5.Display.print("Tracked: ");
+  M5.Display.print(deviceIndex);
+  M5.Display.print("  Ignored: ");
+  M5.Display.print(ignoreList.size());
   y += 16;
 
-  M5.Lcd.drawLine(0, y, SCREEN_WIDTH, y, DARKGREY);
+  M5.Display.drawLine(0, y, SCREEN_WIDTH, y, DARKGREY);
   y += 4;
 
   // Menu options - compact
   int baseY = y;
   int optionY[3];
   
-  M5.Lcd.setTextColor(CYAN);
+  M5.Display.setTextColor(CYAN);
   
   optionY[0] = y;
-  M5.Lcd.setCursor(10, y);
-  M5.Lcd.print("Toggle Brightness");
+  M5.Display.setCursor(10, y);
+  M5.Display.print("Toggle Brightness");
   y += 11;
   
   optionY[1] = y;
-  M5.Lcd.setCursor(10, y);
-  M5.Lcd.print("Clear Devices");
+  M5.Display.setCursor(10, y);
+  M5.Display.print("Clear Devices");
   y += 11;
   
   optionY[2] = y;
-  M5.Lcd.setCursor(10, y);
-  M5.Lcd.print("Shutdown");
+  M5.Display.setCursor(10, y);
+  M5.Display.print("Shutdown");
   y += 14;
 
   // Instructions at bottom
-  M5.Lcd.drawLine(0, y, SCREEN_WIDTH, y, DARKGREY);
+  M5.Display.drawLine(0, y, SCREEN_WIDTH, y, DARKGREY);
   y += 3;
   
-  M5.Lcd.setTextColor(YELLOW);
-  M5.Lcd.setCursor(2, y);
-  M5.Lcd.print("A:Nav B:Select A+B:Exit");
+  M5.Display.setTextColor(YELLOW);
+  M5.Display.setCursor(2, y);
+  M5.Display.print("A:Nav B:Select A+B:Exit");
   
   // Store baseY globally for highlighting
   menuBaseY = baseY;
@@ -1016,40 +1038,40 @@ void displayMenuScreen() {
 void highlightMenuOption(int index) {
   // Clear all highlights
   for (int i = 0; i < 3; i++) {
-    M5.Lcd.setCursor(2, menuBaseY + (i * 11));
-    M5.Lcd.setTextColor(BLACK);
-    M5.Lcd.print(">");
+    M5.Display.setCursor(2, menuBaseY + (i * 11));
+    M5.Display.setTextColor(BLACK);
+    M5.Display.print(">");
   }
   
   // Draw current highlight
-  M5.Lcd.setCursor(2, menuBaseY + (index * 11));
-  M5.Lcd.setTextColor(YELLOW);
-  M5.Lcd.print(">");
+  M5.Display.setCursor(2, menuBaseY + (index * 11));
+  M5.Display.setTextColor(YELLOW);
+  M5.Display.print(">");
 }
 
 void executeMenuOption(int index) {
-  M5.Lcd.fillScreen(BLACK);
-  M5.Lcd.setTextSize(2);
-  M5.Lcd.setTextColor(CYAN);
-  M5.Lcd.setCursor(30, 50);
+  M5.Display.fillScreen(BLACK);
+  M5.Display.setTextSize(2);
+  M5.Display.setTextColor(CYAN);
+  M5.Display.setCursor(30, 50);
   
   switch (index) {
     case 0:
       toggleBrightness();
-      M5.Lcd.print("Brightness");
-      M5.Lcd.setCursor(40, 70);
-      M5.Lcd.print(highBrightness ? "HIGH" : "LOW");
+      M5.Display.print("Brightness");
+      M5.Display.setCursor(40, 70);
+      M5.Display.print(highBrightness ? "HIGH" : "LOW");
       break;
     case 1:
       clearDevices();
-      M5.Lcd.print("Cleared!");
+      M5.Display.print("Cleared!");
       break;
     case 2:
       shutdownDevice();
       return; // Don't refresh menu
   }
   
-  M5.Lcd.setTextSize(1);
+  M5.Display.setTextSize(1);
   delay(1000);
   displayMenuScreen();
   highlightMenuOption(menuIndex);
@@ -1057,7 +1079,7 @@ void executeMenuOption(int index) {
 
 void toggleBrightness() {
   highBrightness = !highBrightness;
-  M5.Axp.ScreenBreath(highBrightness ? 80 : 30);
+  M5.Display.setBrightness(highBrightness ? 204 : 77); // 80/100*255 : 30/100*255
   lastButtonPressTime = millis(); // Reset dim timer
 }
 
@@ -1069,16 +1091,16 @@ void clearDevices() {
 
 void shutdownDevice() {
   saveDeviceData();
-  M5.Lcd.fillScreen(RED);
-  M5.Lcd.setTextSize(2);
-  M5.Lcd.setTextColor(WHITE);
-  M5.Lcd.setCursor(20, 50);
-  M5.Lcd.print("Shutting Down");
-  M5.Lcd.setTextSize(1);
-  M5.Lcd.setCursor(40, 80);
-  M5.Lcd.print("Goodbye!");
+  M5.Display.fillScreen(RED);
+  M5.Display.setTextSize(2);
+  M5.Display.setTextColor(WHITE);
+  M5.Display.setCursor(20, 50);
+  M5.Display.print("Shutting Down");
+  M5.Display.setTextSize(1);
+  M5.Display.setCursor(40, 80);
+  M5.Display.print("Goodbye!");
   delay(2000);
-  M5.Axp.PowerOff();
+  M5.Power.powerOff();
 }
 
 void removeOldEntries(unsigned long currentTime) {
