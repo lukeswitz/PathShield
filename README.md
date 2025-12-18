@@ -29,12 +29,12 @@ PathShield is an RF awareness tool for M5StickC Plus (v1 & v2)- It uses BLE & Wi
 ## Features
 
 - **Dual-Band Scanning**: Alternates WiFi and BLE detection, displays MAC, vendor, SSID, channel, hit count & RSSI. 
-- **Persistence Scoring**: Multi-factor algorithm reduces false positives
+- **Persistence Scoring**: Multi-factor algorithm reduces false positives. Allowlist for known devices.
 - **Real-Time Alerts**: Visual notifications for detected trackers and user specified MAC targets
 - **5000+ MAC Database**: Automatic offline manufacturer identification
 
-> [!NOTE]
-> Change the `specialMacs` to your own target devices, or use as is: detects Flock and Axon Taser cameras.  
+> [!TIP]
+> Modify `allowlistMacs` to ignore known devices. Change the `specialMacs` to your own target devices (default detects Flock and Axon Taser cameras).
 
 ## Installation
 
@@ -42,14 +42,17 @@ PathShield is an RF awareness tool for M5StickC Plus (v1 & v2)- It uses BLE & Wi
 [Install PathShield](https://lukeswitz.github.io/PathShield/)
 
 1. Open link in Chrome, Edge, or Opera (not Safari/Firefox)
-2. Connect M5StickC Plus via USB-C
+2. Connect device via USB-C
 3. Click "Deploy Firmware"
-4. Select serial port
-5. Wait ~2 minutes for it to complete
+4. Select serial port, click "Connect"
+5. Select "Install PathShield"
+6. Optional: Choose "Erase device" (to clear artifact SPIFFS data)
+7. Select "Next" > Install
+8. Wait ~2 minutes for it to complete
 
 ### From Source w/Arduino IDE
 
-1. Install M5StickCPlus library
+1. Install M5Unified library
 2. Board: **M5Stick-C-Plus**
 3. Partition: **Huge APP (3MB No OTA/1MB SPIFFS)**
 4. Upload sketch
