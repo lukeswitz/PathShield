@@ -1,7 +1,7 @@
 <div align="center">
 <img height="500" alt="image" src="https://github.com/user-attachments/assets/0dac6a9f-32a8-4b05-b6a1-b59fc3762f51" />
 
-PathShield is an RF awareness tool for M5StickC Plus (v1)- It uses BLE & WiFI scanning to detect and alert to devices following you, and also user defined targets. 
+PathShield is an RF awareness tool for M5StickC Plus (v1 & v2)- It uses BLE & WiFI scanning to detect and alert to devices following you, and also user defined targets. 
 </div>
 
 ---
@@ -222,7 +222,7 @@ M5.Display.drawFastHLine(0, 0, SCREEN_WIDTH, MAGENTA);  // Border color
 
 ## Troubleshooting
 
-> Tested with M5stickCPlusv1. Support for more devices can be requested by opening a ticket
+> Tested with M5stickCPlus-v1 and v2. Support for more devices can be requested by opening a ticket
 
 ### No Alerts for Known Tracker
 
