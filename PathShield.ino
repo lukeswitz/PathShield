@@ -1714,12 +1714,6 @@ void loop() {
         xSemaphoreGive(deviceMutex);
       }
     }
-    // Low memory warning
-    else if (freeKB < 20) {
-      Serial.print("Low memory warning: ");
-      Serial.print(freeKB);
-      Serial.println(" KB free");
-    }
   }
 
   if (firstRun) {
