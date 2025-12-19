@@ -66,9 +66,6 @@ unsigned long screenTimeoutMs = DEFAULT_SCREEN_TIMEOUT;
 volatile bool deviceDataChanged = false;
 static uint32_t lastStateHash = 0;
 
-// Watchdog status
-bool loopWatchdogActive = false;
-
 bool alertActive = false;
 unsigned long alertStartTime = 0;
 const unsigned long ALERT_DURATION = 5000;
@@ -778,12 +775,12 @@ void displayTrackedDevices() {
 
   xSemaphoreGive(deviceMutex);
 
-  M5.Display.fillScreen(BLACK);
-  drawTopBar();
-
   if (xSemaphoreTake(deviceMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
     return;
   }
+
+  M5.Display.fillScreen(BLACK);
+  drawTopBar();
 
   int y = 15;
   int displayed = 0;
@@ -1136,10 +1133,45 @@ void setScreenTimeout() {
   }
 }
 
+void saveUserPreferences() {
+  File file = SPIFFS.open("/prefs.txt", FILE_WRITE);
+  if (!file) {
+    return;
+  }
+
+  file.print("brightness=");
+  file.println(highBrightness ? "1" : "0");
+  file.print("timeout=");
+  file.println(screenTimeoutMs);
+
+  file.close();
+}
+
+void loadUserPreferences() {
+  File file = SPIFFS.open("/prefs.txt", FILE_READ);
+  if (!file) {
+    return; // File doesn't exist, use defaults
+  }
+
+  while (file.available()) {
+    String line = file.readStringUntil('\n');
+    line.trim();
+
+    if (line.startsWith("brightness=")) {
+      highBrightness = line.substring(11).toInt() == 1;
+    } else if (line.startsWith("timeout=")) {
+      screenTimeoutMs = line.substring(8).toInt();
+    }
+  }
+
+  file.close();
+}
+
 void toggleBrightness() {
   highBrightness = !highBrightness;
   M5.Display.setBrightness(highBrightness ? 204 : 77);
   lastButtonPressTime = millis();
+  saveUserPreferences();
 }
 
 void saveDeviceData() {
@@ -1222,16 +1254,17 @@ void cycleScreenTimeout() {
   int timeoutOptions[] = {10000, 15000, 30000, 60000, 120000, 300000};
   int optionCount = 6;
   int currentIdx = 0;
-  
+
   for (int i = 0; i < optionCount; i++) {
     if (timeoutOptions[i] == screenTimeoutMs) {
       currentIdx = i;
       break;
     }
   }
-  
+
   currentIdx = (currentIdx + 1) % optionCount;
   screenTimeoutMs = timeoutOptions[currentIdx];
+  saveUserPreferences();
 
   char timeStr[20];
   snprintf(timeStr, 20, "%ds TIMEOUT", screenTimeoutMs / 1000);
@@ -1377,15 +1410,6 @@ void handleButtonCombination() {
 void scanTask(void *parameter) {
   Serial.println("scanTask started on Core 0");
 
-  // Add this task to watchdog
-  esp_err_t wdt_add_result = esp_task_wdt_add(NULL);
-  if (wdt_add_result == ESP_OK) {
-    Serial.println("scanTask added to watchdog");
-  } else {
-    Serial.print("scanTask watchdog add failed: ");
-    Serial.println(wdt_add_result);
-  }
-
   vTaskDelay(1000 / portTICK_PERIOD_MS);
   Serial.println("scanTask beginning scans");
 
@@ -1489,40 +1513,19 @@ void scanTask(void *parameter) {
       xSemaphoreGive(deviceMutex);
     }
 
-    // Feed watchdog timer if good to eat
-    if (wdt_add_result == ESP_OK) {
-      esp_task_wdt_reset();
-    }
-
     vTaskDelay(50 / portTICK_PERIOD_MS);
   }
 
   Serial.println("scanTask terminated");
-  if (wdt_add_result == ESP_OK) {
-    esp_task_wdt_delete(NULL);
-  }
   vTaskDelete(NULL);
 }
 
 void setup() {
   esp_task_wdt_deinit();
 
-  esp_task_wdt_config_t wdt_config = {
-    .timeout_ms = 10000,
-    .trigger_panic = true
-  };
-  esp_err_t wdt_result = esp_task_wdt_init(&wdt_config);
-
   Serial.begin(115200);
   delay(1000);
   Serial.println("Starting setup...");
-
-  if (wdt_result == ESP_OK) {
-    Serial.println("Watchdog timer initialized");
-  } else {
-    Serial.print("Watchdog init failed: ");
-    Serial.println(wdt_result);
-  }
 
   M5.begin();
   Serial.println("M5 initialized");
@@ -1532,7 +1535,8 @@ void setup() {
   M5.Display.setRotation(3);
   M5.Display.setTextColor(GREEN);
   M5.Display.setTextSize(1);
-  M5.Display.setBrightness(204);
+  // Don't set brightness here - will be set after loading preferences
+  M5.Display.setBrightness(204); // Temporary for startup message
 
   delay(100);
   Serial.println("Display initialized");
@@ -1634,7 +1638,12 @@ void setup() {
   }
 
   Serial.println("SPIFFS initialized");
-  
+
+  // Load user preferences (brightness, timeout, etc.)
+  loadUserPreferences();
+  Serial.print("User preferences loaded - Brightness: ");
+  Serial.println(highBrightness ? "High" : "Low");
+
   deviceMutex = xSemaphoreCreateMutex();
   if (deviceMutex == NULL) {
     Serial.println("ERROR: Failed to create device mutex!");
@@ -1671,26 +1680,10 @@ void setup() {
   lastActivityTime = millis();
   lastButtonPressTime = millis();
 
-  // Add loop task to watchdog after everything is initialized
-  esp_err_t loop_wdt_result = esp_task_wdt_add(NULL);
-  if (loop_wdt_result == ESP_OK) {
-    Serial.println("Loop task added to watchdog");
-    loopWatchdogActive = true;
-  } else {
-    Serial.print("Loop task watchdog add failed: ");
-    Serial.println(loop_wdt_result);
-    loopWatchdogActive = false;
-  }
-
   Serial.println("PathShield setup complete");
 }
 
 void loop() {
-  // Feed watchdog timer FIRST - before any early returns
-  if (loopWatchdogActive) {
-    esp_task_wdt_reset();
-  }
-
   unsigned long currentMillis = millis();
   static unsigned long lastDisplayUpdate = 0;
   static bool firstRun = true;
@@ -1730,6 +1723,7 @@ void loop() {
   }
 
   if (firstRun) {
+      // Apply saved brightness preference
       M5.Display.setBrightness(highBrightness ? 204 : 77);
       screenOn = true;
 
