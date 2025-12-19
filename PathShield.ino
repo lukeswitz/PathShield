@@ -1243,9 +1243,11 @@ void handleBtnB() {
   lastButtonPressTime = millis();
 
   if (screenDimmed) {
+    screenOn = true;
     highBrightness = true;
     M5.Display.setBrightness(204);
     screenDimmed = false;
+    lastActivityTime = millis();
     displayTrackedDevices();
     return;
   }
@@ -1597,16 +1599,21 @@ void loop() {
     }
   }
 
-  if (screenOn && currentMillis - lastActivityTime > screenTimeoutMs) {
-    screenOn = false;
-    M5.Display.setBrightness(0);
-  }
+  // Dim screen at 75% of timeout (or 5 seconds before timeout, whichever is sooner)
+  unsigned long dimThreshold = min(screenTimeoutMs * 3 / 4, screenTimeoutMs - 5000);
+  if (dimThreshold < 5000) dimThreshold = screenTimeoutMs / 2; // For very short timeouts
 
   if (screenOn && !screenDimmed && highBrightness &&
-      currentMillis - lastButtonPressTime > IDLE_TIMEOUT) {
+      currentMillis - lastActivityTime > dimThreshold) {
     highBrightness = false;
     M5.Display.setBrightness(77);
     screenDimmed = true;
+  }
+
+  // Turn off screen after full timeout
+  if (screenOn && currentMillis - lastActivityTime > screenTimeoutMs) {
+    screenOn = false;
+    M5.Display.setBrightness(0);
   }
 
   // Refresh display periodically
