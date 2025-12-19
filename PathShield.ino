@@ -66,6 +66,9 @@ unsigned long screenTimeoutMs = DEFAULT_SCREEN_TIMEOUT;
 volatile bool deviceDataChanged = false;
 static uint32_t lastStateHash = 0;
 
+// Watchdog status
+bool loopWatchdogActive = false;
+
 bool alertActive = false;
 unsigned long alertStartTime = 0;
 const unsigned long ALERT_DURATION = 5000;
@@ -635,10 +638,24 @@ void drawTopBar() {
   static float lastValidBatVoltage = 3.7f;
   float batVoltage = M5.Power.getBatteryVoltage() / 1000.0f;
 
-  if (batVoltage > 2.5f) {
+  // Filter out obviously bad readings (sensor errors), but allow real low battery
+  if (batVoltage > 2.0f && batVoltage < 4.5f) {
     lastValidBatVoltage = batVoltage;
   } else {
     batVoltage = lastValidBatVoltage;
+  }
+
+  // Critical battery check - force shutdown if critically low
+  if (batVoltage < 3.0f && batVoltage > 2.0f) {
+    M5.Display.fillScreen(RED);
+    M5.Display.setTextSize(2);
+    M5.Display.setTextColor(WHITE);
+    M5.Display.setCursor(10, 50);
+    M5.Display.print("LOW BATTERY!");
+    M5.Display.setCursor(20, 80);
+    M5.Display.print("SHUTTING DOWN");
+    delay(3000);
+    M5.Power.powerOff();
   }
 
   int batPercent = (int)((batVoltage - 3.0f) / 1.2f * 100.0f);
@@ -985,8 +1002,8 @@ void displayMenuScreen() {
   static float lastValidBatVoltage = 3.7f;
   float batVoltage = M5.Power.getBatteryVoltage() / 1000.0f;
 
-  // Ignore garbage reads
-  if (batVoltage > 2.5f) {
+  // Filter out obviously bad readings (sensor errors), but allow real low battery
+  if (batVoltage > 2.0f && batVoltage < 4.5f) {
     lastValidBatVoltage = batVoltage;
   } else {
     batVoltage = lastValidBatVoltage;
@@ -1360,6 +1377,15 @@ void handleButtonCombination() {
 void scanTask(void *parameter) {
   Serial.println("scanTask started on Core 0");
 
+  // Add this task to watchdog
+  esp_err_t wdt_add_result = esp_task_wdt_add(NULL);
+  if (wdt_add_result == ESP_OK) {
+    Serial.println("scanTask added to watchdog");
+  } else {
+    Serial.print("scanTask watchdog add failed: ");
+    Serial.println(wdt_add_result);
+  }
+
   vTaskDelay(1000 / portTICK_PERIOD_MS);
   Serial.println("scanTask beginning scans");
 
@@ -1381,8 +1407,8 @@ void scanTask(void *parameter) {
       localScanningWiFi = !localScanningWiFi;
       lastScanSwitch = currentMillis;
 
-      // Update global flag with mutex
-      if (xSemaphoreTake(deviceMutex, portMAX_DELAY) == pdTRUE) {
+      // Update global flag with mutex (with timeout to prevent deadlock)
+      if (xSemaphoreTake(deviceMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
         scanningWiFi = localScanningWiFi;
         xSemaphoreGive(deviceMutex);
       }
@@ -1392,7 +1418,7 @@ void scanTask(void *parameter) {
       // WiFi Scan (blocking)
       int n = WiFi.scanNetworks(false, false, false, 300);
 
-      if (xSemaphoreTake(deviceMutex, portMAX_DELAY) == pdTRUE) {
+      if (xSemaphoreTake(deviceMutex, pdMS_TO_TICKS(2000)) == pdTRUE) {
         for (int i = 0; i < n; i++) {
           trackWiFiDevice(WiFi.SSID(i).c_str(), WiFi.BSSIDstr(i).c_str(),
                           WiFi.RSSI(i), WiFi.channel(i), WiFi.encryptionType(i),
@@ -1411,7 +1437,7 @@ void scanTask(void *parameter) {
         bool newTrackerFound = false;
         int alertDeviceIdx = -1;
 
-        if (xSemaphoreTake(deviceMutex, portMAX_DELAY) == pdTRUE) {
+        if (xSemaphoreTake(deviceMutex, pdMS_TO_TICKS(2000)) == pdTRUE) {
           int count = foundDevicesPtr->getCount();
           for (int i = 0; i < count; i++) {
             BLEAdvertisedDevice device = foundDevicesPtr->getDevice(i);
@@ -1430,12 +1456,25 @@ void scanTask(void *parameter) {
         }
 
         if (newTrackerFound && alertDeviceIdx >= 0) {
-          if (xSemaphoreTake(deviceMutex, portMAX_DELAY) == pdTRUE) {
+          bool isSpecial = false;
+          char alertName[21];
+          char alertAddr[18];
+          float alertScore = 0.0f;
+
+          if (xSemaphoreTake(deviceMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
             if (deviceIndex > 0) {
-              alertUser(trackedDevices[0].isSpecial, trackedDevices[0].name,
-                        trackedDevices[0].address, trackedDevices[0].persistenceScore);
+              isSpecial = trackedDevices[0].isSpecial;
+              strncpy(alertName, trackedDevices[0].name, 20);
+              alertName[20] = '\0';
+              strncpy(alertAddr, trackedDevices[0].address, 17);
+              alertAddr[17] = '\0';
+              alertScore = trackedDevices[0].persistenceScore;
             }
             xSemaphoreGive(deviceMutex);
+          }
+
+          if (deviceIndex > 0) {
+            alertUser(isSpecial, alertName, alertAddr, alertScore);
           }
         }
 
@@ -1444,25 +1483,46 @@ void scanTask(void *parameter) {
     }
 
     // Clean up old entries periodically
-    if (xSemaphoreTake(deviceMutex, portMAX_DELAY) == pdTRUE) {
+    if (xSemaphoreTake(deviceMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
       removeOldEntries(currentTime);
       removeOldWiFiEntries(currentTime);
       xSemaphoreGive(deviceMutex);
+    }
+
+    // Feed watchdog timer if good to eat
+    if (wdt_add_result == ESP_OK) {
+      esp_task_wdt_reset();
     }
 
     vTaskDelay(50 / portTICK_PERIOD_MS);
   }
 
   Serial.println("scanTask terminated");
+  if (wdt_add_result == ESP_OK) {
+    esp_task_wdt_delete(NULL);
+  }
   vTaskDelete(NULL);
 }
 
 void setup() {
   esp_task_wdt_deinit();
-  
+
+  esp_task_wdt_config_t wdt_config = {
+    .timeout_ms = 10000,
+    .trigger_panic = true
+  };
+  esp_err_t wdt_result = esp_task_wdt_init(&wdt_config);
+
   Serial.begin(115200);
   delay(1000);
   Serial.println("Starting setup...");
+
+  if (wdt_result == ESP_OK) {
+    Serial.println("Watchdog timer initialized");
+  } else {
+    Serial.print("Watchdog init failed: ");
+    Serial.println(wdt_result);
+  }
 
   M5.begin();
   Serial.println("M5 initialized");
@@ -1611,16 +1671,63 @@ void setup() {
   lastActivityTime = millis();
   lastButtonPressTime = millis();
 
+  // Add loop task to watchdog after everything is initialized
+  esp_err_t loop_wdt_result = esp_task_wdt_add(NULL);
+  if (loop_wdt_result == ESP_OK) {
+    Serial.println("Loop task added to watchdog");
+    loopWatchdogActive = true;
+  } else {
+    Serial.print("Loop task watchdog add failed: ");
+    Serial.println(loop_wdt_result);
+    loopWatchdogActive = false;
+  }
+
   Serial.println("PathShield setup complete");
 }
 
 void loop() {
+  // Feed watchdog timer FIRST - before any early returns
+  if (loopWatchdogActive) {
+    esp_task_wdt_reset();
+  }
+
   unsigned long currentMillis = millis();
   static unsigned long lastDisplayUpdate = 0;
   static bool firstRun = true;
+  static unsigned long lastMemoryCheck = 0;
   const unsigned long DISPLAY_UPDATE_INTERVAL = 1000;
+  const unsigned long MEMORY_CHECK_INTERVAL = 5000;
 
   M5.update();
+
+  // Memory safety check every 5 seconds
+  if (currentMillis - lastMemoryCheck > MEMORY_CHECK_INTERVAL) {
+    lastMemoryCheck = currentMillis;
+    uint32_t freeHeap = ESP.getFreeHeap();
+    uint32_t freeKB = freeHeap / 1024;
+
+    // Critical memory level - force cleanup
+    if (freeKB < 10) {
+      Serial.println("CRITICAL MEMORY! Forcing cleanup...");
+      if (xSemaphoreTake(deviceMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+        // Clear oldest half of devices
+        int toClear = deviceIndex / 2;
+        for (int i = deviceIndex - toClear; i < deviceIndex; i++) {
+          if (!trackedDevices[i].alertTriggered && !trackedDevices[i].isSpecial) {
+            deviceIndex = i;
+            break;
+          }
+        }
+        xSemaphoreGive(deviceMutex);
+      }
+    }
+    // Low memory warning
+    else if (freeKB < 20) {
+      Serial.print("Low memory warning: ");
+      Serial.print(freeKB);
+      Serial.println(" KB free");
+    }
+  }
 
   if (firstRun) {
       M5.Display.setBrightness(highBrightness ? 204 : 77);
