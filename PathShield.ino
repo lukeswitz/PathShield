@@ -11,6 +11,7 @@
 
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 135
+#define DEFAULT_SCREEN_TIMEOUT 30000
 
 // Memory constants, tweak for traffic density/memory
 #define MAX_DEVICES 50
@@ -57,6 +58,10 @@ bool highBrightness = true;
 bool paused = false;
 bool filterByName = false;
 bool screenDimmed = false;
+unsigned long lastButtonPressTime = 0;
+unsigned long lastActivityTime = 0;
+bool screenOn = true;
+unsigned long screenTimeoutMs = DEFAULT_SCREEN_TIMEOUT;
 
 struct WiFiDeviceInfo {
   char ssid[33];
@@ -110,7 +115,6 @@ struct DeviceInfo {
 DeviceInfo trackedDevices[MAX_DEVICES];
 int deviceIndex = 0;
 BLEScan *pBLEScan;
-unsigned long lastButtonPressTime = 0;
 int scrollIndex = 0;
 std::set<String> ignoreList;
 
@@ -822,6 +826,14 @@ void displayTrackedDevices() {
 }
 
 void displayMenuScreen() {
+  static unsigned long lastRender = 0;
+  unsigned long now = millis();
+  
+  if (now - lastRender < 500) {
+    return;
+  }
+  lastRender = now;
+
   M5.Display.fillScreen(BLACK);
   M5.Display.setCursor(2, 2);
   M5.Display.setTextColor(GREEN);
@@ -834,35 +846,28 @@ void displayMenuScreen() {
 
   M5.Display.setTextColor(WHITE);
   M5.Display.setCursor(2, y);
-  M5.Display.print("Battery: ");
   float batVoltage = M5.Power.getBatteryVoltage() / 1000.0f;
-  M5.Display.print(batVoltage, 2);
-  M5.Display.print("V");
-
   int batPercent = (int)((batVoltage - 3.0f) / 1.2f * 100.0f);
   if (batPercent > 100) batPercent = 100;
   if (batPercent < 0) batPercent = 0;
-  M5.Display.print(" (");
+  M5.Display.print("Bat:");
   M5.Display.print(batPercent);
-  M5.Display.print("%)");
+  M5.Display.print("% Bright:");
+  M5.Display.print(highBrightness ? "Hi" : "Lo");
   y += 12;
 
   M5.Display.setCursor(2, y);
-  M5.Display.print("Brightness: ");
-  M5.Display.print(highBrightness ? "High" : "Low");
-  y += 12;
-
-  M5.Display.setCursor(2, y);
-  M5.Display.print("Tracked: ");
+  M5.Display.print("Timeout:");
+  M5.Display.print(screenTimeoutMs / 1000);
+  M5.Display.print("s Tracked:");
   M5.Display.print(deviceIndex);
-  M5.Display.print("  Ignored: ");
-  M5.Display.print(ignoreList.size());
   y += 12;
 
   M5.Display.setCursor(2, y);
-  M5.Display.print("Free RAM: ");
+  M5.Display.print("RAM:");
   M5.Display.print(ESP.getFreeHeap() / 1024);
-  M5.Display.print(" KB");
+  M5.Display.print("KB Ignored:");
+  M5.Display.print(ignoreList.size());
   y += 16;
 
   M5.Display.drawLine(0, y, SCREEN_WIDTH, y, DARKGREY);
@@ -877,23 +882,27 @@ void displayMenuScreen() {
   y += 11;
 
   M5.Display.setCursor(10, y);
+  M5.Display.print("Set Screen Timeout");
+  y += 11;
+
+  M5.Display.setCursor(10, y);
   M5.Display.print("Clear Devices");
   y += 11;
 
   M5.Display.setCursor(10, y);
   M5.Display.print("Shutdown");
-  y += 14;
+  y += 12;
 
   M5.Display.drawLine(0, y, SCREEN_WIDTH, y, DARKGREY);
-  y += 3;
 
   M5.Display.setTextColor(YELLOW);
-  M5.Display.setCursor(2, y);
-  M5.Display.print("A:Nav B:Select A+B:Exit");
+  M5.Display.setTextSize(1);
+  M5.Display.setCursor(2, y + 3);
+  M5.Display.print("A:Nav B:Sel A+B:Exit");
 }
 
 void highlightMenuOption(int index) {
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 4; i++) {
     M5.Display.setCursor(2, menuBaseY + (i * 11));
     M5.Display.setTextColor(BLACK);
     M5.Display.print(">");
@@ -902,6 +911,68 @@ void highlightMenuOption(int index) {
   M5.Display.setCursor(2, menuBaseY + (index * 11));
   M5.Display.setTextColor(YELLOW);
   M5.Display.print(">");
+}
+
+void setScreenTimeout() {
+  int timeoutOptions[] = {10000, 15000, 30000, 60000, 120000, 300000};
+  int optionCount = 6;
+  int selected = 0;
+  
+  for (int i = 0; i < optionCount; i++) {
+    if (timeoutOptions[i] == screenTimeoutMs) {
+      selected = i;
+      break;
+    }
+  }
+
+  bool settingTimeout = true;
+  unsigned long lastRender = 0;
+  
+  while (settingTimeout) {
+    unsigned long now = millis();
+    if (now - lastRender >= 200) {
+      lastRender = now;
+      
+      M5.Display.fillScreen(BLACK);
+      M5.Display.setTextSize(1);
+      M5.Display.setTextColor(GREEN);
+      M5.Display.setCursor(10, 10);
+      M5.Display.print("Screen Timeout");
+      
+      M5.Display.drawLine(0, 20, SCREEN_WIDTH, 20, DARKGREY);
+
+      int y = 30;
+      for (int i = 0; i < optionCount; i++) {
+        if (i == selected) {
+          M5.Display.setTextColor(YELLOW);
+          M5.Display.setCursor(5, y);
+          M5.Display.print(">");
+        } else {
+          M5.Display.setTextColor(WHITE);
+          M5.Display.setCursor(10, y);
+        }
+        M5.Display.print(timeoutOptions[i] / 1000);
+        M5.Display.print("s");
+        y += 12;
+      }
+
+      M5.Display.setTextColor(CYAN);
+      M5.Display.setCursor(10, 110);
+      M5.Display.print("A:Up B:Select");
+    }
+
+    M5.update();
+    if (M5.BtnA.wasPressed()) {
+      selected = (selected - 1 + optionCount) % optionCount;
+      delay(200);
+    }
+    if (M5.BtnB.wasPressed()) {
+      screenTimeoutMs = timeoutOptions[selected];
+      settingTimeout = false;
+      delay(200);
+    }
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+  }
 }
 
 void toggleBrightness() {
@@ -948,29 +1019,35 @@ void shutdownDevice() {
 }
 
 void executeMenuOption(int index) {
-  M5.Display.fillScreen(BLACK);
-  M5.Display.setTextSize(2);
-  M5.Display.setTextColor(CYAN);
-  M5.Display.setCursor(30, 50);
-
   switch (index) {
     case 0:
       toggleBrightness();
+      M5.Display.fillScreen(BLACK);
+      M5.Display.setTextSize(2);
+      M5.Display.setTextColor(CYAN);
+      M5.Display.setCursor(30, 50);
       M5.Display.print("Brightness");
       M5.Display.setCursor(40, 70);
       M5.Display.print(highBrightness ? "HIGH" : "LOW");
+      delay(1000);
       break;
     case 1:
-      clearDevices();
-      M5.Display.print("Cleared!");
-      break;
+      setScreenTimeout();
+      return;
     case 2:
+      clearDevices();
+      M5.Display.fillScreen(BLACK);
+      M5.Display.setTextSize(2);
+      M5.Display.setTextColor(CYAN);
+      M5.Display.setCursor(30, 50);
+      M5.Display.print("Cleared!");
+      delay(1000);
+      break;
+    case 3:
       shutdownDevice();
       return;
   }
 
-  M5.Display.setTextSize(1);
-  delay(1000);
   displayMenuScreen();
   highlightMenuOption(menuIndex);
 }
@@ -989,10 +1066,11 @@ bool checkButtonCombo() {
 
 void handleBtnA() {
   lastButtonPressTime = millis();
+  lastActivityTime = millis();
 
-  if (screenDimmed) {
-    highBrightness = true;
-    M5.Display.setBrightness(204);
+  if (!screenOn) {
+    screenOn = true;
+    M5.Display.setBrightness(highBrightness ? 204 : 77);
     screenDimmed = false;
     displayTrackedDevices();
     return;
@@ -1027,6 +1105,14 @@ void handleBtnB() {
   if (screenDimmed) {
     highBrightness = true;
     M5.Display.setBrightness(204);
+    screenDimmed = false;
+    displayTrackedDevices();
+    return;
+  }
+
+  if (!screenOn) {
+    screenOn = true;
+    M5.Display.setBrightness(highBrightness ? 204 : 77);
     screenDimmed = false;
     displayTrackedDevices();
     return;
@@ -1108,7 +1194,7 @@ void handleButtonCombination() {
       }
 
       if (M5.BtnA.wasPressed()) {
-        menuIndex = (menuIndex + 1) % 3;
+        menuIndex = (menuIndex + 1) % 4;
         displayMenuScreen();
         highlightMenuOption(menuIndex);
         delay(200);
@@ -1323,6 +1409,19 @@ void loop() {
   M5.update();
   unsigned long currentMillis = millis();
 
+  // ALWAYS wake screen on ANY button press
+  if (M5.BtnA.wasPressed() || M5.BtnB.wasPressed()) {
+    lastActivityTime = currentMillis;
+    lastButtonPressTime = currentMillis;
+    if (!screenOn) {
+      screenOn = true;
+      M5.Display.setBrightness(highBrightness ? 204 : 77);
+      screenDimmed = false;
+      vTaskDelay(50 / portTICK_PERIOD_MS);
+      return;  // Exit early to prevent double-triggering
+    }
+  }
+
   if (checkButtonCombo()) {
     handleButtonCombination();
     return;
@@ -1344,15 +1443,21 @@ void loop() {
     }
   }
 
-  if (paused) {
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    return;
+  if (screenOn && currentMillis - lastActivityTime > screenTimeoutMs) {
+    screenOn = false;
+    M5.Display.setBrightness(0);
   }
 
-  if (currentMillis - lastButtonPressTime > IDLE_TIMEOUT && highBrightness) {
+  if (screenOn && !screenDimmed && highBrightness && 
+      currentMillis - lastButtonPressTime > IDLE_TIMEOUT) {
     highBrightness = false;
     M5.Display.setBrightness(77);
     screenDimmed = true;
+  }
+
+  if (paused) {
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    return;
   }
 
   if (currentMillis - lastScanSwitch > SCAN_SWITCH_INTERVAL) {
@@ -1400,7 +1505,10 @@ void loop() {
     }
   }
 
-  displayTrackedDevices();
+  if (screenOn) {
+    displayTrackedDevices();
+  }
+
   removeOldEntries(currentTime);
   removeOldWiFiEntries(currentTime);
 
