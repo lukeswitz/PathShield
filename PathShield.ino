@@ -56,6 +56,7 @@ int menuIndex = 0;
 int menuBaseY = 0;
 
 bool highBrightness = true;
+bool currentlyBright = true;
 bool paused = false;
 bool filterByName = false;
 bool screenDimmed = false;
@@ -65,6 +66,7 @@ bool screenOn = true;
 unsigned long screenTimeoutMs = DEFAULT_SCREEN_TIMEOUT;
 volatile bool deviceDataChanged = false;
 static uint32_t lastStateHash = 0;
+unsigned long lastDisplayRender = 0;
 
 bool alertActive = false;
 unsigned long alertStartTime = 0;
@@ -129,7 +131,6 @@ int deviceIndex = 0;
 BLEScan *pBLEScan;
 int scrollIndex = 0;
 
-// FreeRTOS multi-core support
 SemaphoreHandle_t deviceMutex = NULL;
 TaskHandle_t scanTaskHandle = NULL;
 volatile bool scanTaskRunning = true;
@@ -243,8 +244,6 @@ void updateTimeWindows(DeviceInfo &device, unsigned long currentTime) {
 
 float calculatePersistenceScore(DeviceInfo &device, unsigned long currentTime) {
   float score = 0.0f;
-
-  // Calculate RSSI range (difference between max and min)
   int rssiRange = device.maxRssi - device.minRssi;
 
   if (rssiRange < MIN_RSSI_RANGE) {
@@ -521,7 +520,7 @@ void alertUser(bool isSpecial, const char *name, const char *mac, float persiste
   M5.Display.fillScreen(BLACK);
   M5.Display.setTextColor(WHITE);
   M5.Display.setTextSize(1);
-  lastStateHash = 0;  // Force redraw on next update
+  lastStateHash = 0;
   screenOn = true;
   lastActivityTime = millis();
   M5.Display.setBrightness(highBrightness ? 204 : 77);
@@ -752,10 +751,9 @@ uint32_t getDisplayStateHash() {
 }
 
 void displayTrackedDevices() {
-  static unsigned long lastRender = 0;
   unsigned long now = millis();
 
-  if (now - lastRender < 500) {
+  if (now - lastDisplayRender < 500) {
     return;
   }
 
@@ -771,7 +769,7 @@ void displayTrackedDevices() {
 
   // Actually have data to change, go on
   lastStateHash = currentHash;
-  lastRender = now;
+  lastDisplayRender = now;
 
   xSemaphoreGive(deviceMutex);
 
@@ -975,13 +973,12 @@ void displayTrackedDevices() {
 }
 
 void displayMenuScreen() {
-  static unsigned long lastRender = 0;
   unsigned long now = millis();
-  
-  if (now - lastRender < 500) {
+
+  if (now - lastDisplayRender < 500) {
     return;
   }
-  lastRender = now;
+  lastDisplayRender = now;
 
   M5.Display.fillScreen(BLACK);
   M5.Display.setCursor(2, 2);
@@ -1290,8 +1287,11 @@ void handleBtnA() {
 
   if (!screenOn) {
     screenOn = true;
+    currentlyBright = true;
     M5.Display.setBrightness(highBrightness ? 204 : 77);
     screenDimmed = false;
+    lastDisplayRender = 0;  // Force immediate display update
+    lastStateHash = 0;
     displayTrackedDevices();
     return;
   }
@@ -1315,18 +1315,24 @@ void handleBtnB() {
 
   if (screenDimmed) {
     screenOn = true;
-    highBrightness = true;
-    M5.Display.setBrightness(204);
+    currentlyBright = true;
+    M5.Display.setBrightness(highBrightness ? 204 : 77);
     screenDimmed = false;
     lastActivityTime = millis();
+    lastDisplayRender = 0;  // Force immediate display update
+    lastStateHash = 0;
     displayTrackedDevices();
     return;
   }
 
   if (!screenOn) {
     screenOn = true;
+    currentlyBright = true;
     M5.Display.setBrightness(highBrightness ? 204 : 77);
     screenDimmed = false;
+    lastActivityTime = millis();
+    lastDisplayRender = 0;  // Force immediate display update
+    lastStateHash = 0;
     displayTrackedDevices();
     return;
   }
@@ -1386,8 +1392,15 @@ void handleButtonCombination() {
           delay(10);
         }
         inMenu = false;
+        lastActivityTime = millis();
+        
         M5.Display.fillScreen(BLACK);
-        displayTrackedDevices();
+        drawTopBar();
+        
+        // Force state reset for next render
+        lastDisplayRender = millis();
+        lastStateHash = 0;
+        
         break;
       }
 
@@ -1641,6 +1654,7 @@ void setup() {
 
   // Load user preferences (brightness, timeout, etc.)
   loadUserPreferences();
+  currentlyBright = highBrightness;  // Initialize current brightness to match user preference
   Serial.print("User preferences loaded - Brightness: ");
   Serial.println(highBrightness ? "High" : "Low");
 
@@ -1693,17 +1707,14 @@ void loop() {
 
   M5.update();
 
-  // Memory safety check every 5 seconds
   if (currentMillis - lastMemoryCheck > MEMORY_CHECK_INTERVAL) {
     lastMemoryCheck = currentMillis;
     uint32_t freeHeap = ESP.getFreeHeap();
     uint32_t freeKB = freeHeap / 1024;
 
-    // Critical memory level - force cleanup
     if (freeKB < 10) {
       Serial.println("CRITICAL MEMORY! Forcing cleanup...");
       if (xSemaphoreTake(deviceMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
-        // Clear oldest half of devices
         int toClear = deviceIndex / 2;
         for (int i = deviceIndex - toClear; i < deviceIndex; i++) {
           if (!trackedDevices[i].alertTriggered && !trackedDevices[i].isSpecial) {
@@ -1717,26 +1728,28 @@ void loop() {
   }
 
   if (firstRun) {
-      // Apply saved brightness preference
-      M5.Display.setBrightness(highBrightness ? 204 : 77);
-      screenOn = true;
-
-      delay(200);
-      displayTrackedDevices();
-      lastDisplayUpdate = currentMillis;
-      firstRun = false;
-    }
-
-    bool btnA = M5.BtnA.wasPressed();
-    bool btnB = M5.BtnB.wasPressed();
-
-    if ((btnA || btnB) && !screenOn) {
+    M5.Display.setBrightness(highBrightness ? 204 : 77);
     screenOn = true;
+    delay(200);
+    displayTrackedDevices();
+    lastDisplayUpdate = currentMillis;
+    firstRun = false;
+  }
+
+  bool btnA = M5.BtnA.wasPressed();
+  bool btnB = M5.BtnB.wasPressed();
+
+  // Wake it up
+  if ((btnA || btnB) && !screenOn) {
+    screenOn = true;
+    currentlyBright = true;
     lastActivityTime = currentMillis;
     lastButtonPressTime = currentMillis;
     M5.Display.setBrightness(highBrightness ? 204 : 77);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
     screenDimmed = false;
     lastStateHash = 0;
+    lastDisplayRender = 0;
     displayTrackedDevices();
     lastDisplayUpdate = currentMillis;
     return;
@@ -1770,30 +1783,28 @@ void loop() {
     }
   }
 
-  // Dim screen at 75% of timeout (or 5 seconds before timeout, whichever is sooner)
-  unsigned long dimThreshold = min(screenTimeoutMs * 3 / 4, screenTimeoutMs - 5000);
-  if (dimThreshold < 5000) dimThreshold = screenTimeoutMs / 2; // For very short timeouts
+  unsigned long dimThreshold =
+      min(screenTimeoutMs * 3 / 4, screenTimeoutMs - 5000);
+  if (dimThreshold < 5000) dimThreshold = screenTimeoutMs / 2;
 
-  if (screenOn && !screenDimmed && highBrightness &&
+  if (screenOn && !screenDimmed && currentlyBright &&
       currentMillis - lastActivityTime > dimThreshold) {
-    highBrightness = false;
-    M5.Display.setBrightness(77);
+    currentlyBright = false;
+    M5.Display.setBrightness(10);
     screenDimmed = true;
   }
 
-  // Turn off screen after full timeout
   if (screenOn && currentMillis - lastActivityTime > screenTimeoutMs) {
     screenOn = false;
-    M5.Display.setBrightness(0);
+    currentlyBright = false;
+    M5.Display.setBrightness(10);
   }
 
-  // Refresh display periodically
   if (screenOn && currentMillis - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
     displayTrackedDevices();
     lastDisplayUpdate = currentMillis;
   }
 
-  // Paused or screen off
   if (paused || !screenOn) {
     vTaskDelay(100 / portTICK_PERIOD_MS);
   } else {
