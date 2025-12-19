@@ -13,7 +13,7 @@
 #define SCREEN_HEIGHT 135
 #define DEFAULT_SCREEN_TIMEOUT 30000
 
-// Memory constants, TWEAK THESE FOR YOUR USE
+// Memory constants, TWEAK THESE FOR RF DENSITY
 #define MAX_DEVICES 50
 #define MAX_WIFI_DEVICES 50
 #define DETECTION_WINDOW 300
@@ -1335,13 +1335,6 @@ void handleButtonCombination() {
 void scanTask(void *parameter) {
   Serial.println("scanTask started on Core 0");
 
-  esp_err_t wdt_result = esp_task_wdt_delete(NULL);
-  if (wdt_result == ESP_OK) {
-    Serial.println("Watchdog disabled for scan task");
-  } else {
-    Serial.println("Scan task was not registered to watchdog (expected)");
-  }
-
   vTaskDelay(1000 / portTICK_PERIOD_MS);
   Serial.println("scanTask beginning scans");
 
@@ -1440,6 +1433,8 @@ void scanTask(void *parameter) {
 }
 
 void setup() {
+  esp_task_wdt_deinit();
+  
   Serial.begin(115200);
   delay(1000);
   Serial.println("Starting setup...");
