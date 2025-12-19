@@ -35,7 +35,9 @@ PathShield is an RF awareness tool for M5StickC-Plus (v1 & v2). It uses BLE/WiFI
 - **Efficient Updates**: Only redraws display when data changes (reduces power draw)
 
 > [!TIP]
-> Modify `allowlistMacs` to ignore known devices. Change the `specialMacs` to your own target devices (default detects Flock and Axon Taser cameras).
+> Modify `allowlistMacs` to ignore known devices.
+>
+> Change the `specialMacs` to your own target devices (default detects Flock and Axon Taser cameras).
 
 ## Installation
 
