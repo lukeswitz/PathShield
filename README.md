@@ -85,7 +85,7 @@ A+B hold:  Exit menu
 **Available Settings:**
 - **Brightness**: Low/High (saves battery on low brightness)
 - **Clear Devices**: Clears all tracked devices from memory
-- **Display Timeout**: How long before screen turns off when idle (10-60 seconds)
+- **Display Timeout**: How long before screen turns off when idle (10-300 seconds)
 - **Shutdown Device**: Power off the device
 
 ## Display Guide
