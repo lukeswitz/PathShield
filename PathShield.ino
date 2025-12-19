@@ -30,12 +30,13 @@
 #define WINDOW_OLD 900
 #define WINDOW_OLDEST 1200
 
-#define MIN_DETECTIONS 8
+#define MIN_DETECTIONS 12
 #define MIN_WINDOWS 3
-#define PERSISTENCE_THRESHOLD 0.65
+#define PERSISTENCE_THRESHOLD 0.75
 #define RSSI_STABILITY_THRESHOLD 10
-#define RSSI_VARIATION_THRESHOLD 20
+#define RSSI_VARIATION_THRESHOLD 15
 #define EPSILON_CONNECTED_GAP 180
+#define MIN_RSSI_RANGE 12
 
 #define ESTIMATED_BLE_STACK_KB 75
 #define ESTIMATED_WIFI_STACK_KB 60
@@ -109,6 +110,8 @@ struct DeviceInfo {
   int rssiSum;
   int rssiCount;
   int lastRssi;
+  int minRssi;
+  int maxRssi;
   bool detected;
   bool isSpecial;
   bool alertTriggered;
@@ -240,11 +243,18 @@ void updateTimeWindows(DeviceInfo &device, unsigned long currentTime) {
 
 float calculatePersistenceScore(DeviceInfo &device, unsigned long currentTime) {
   float score = 0.0f;
-  int factors = 0;
+
+  // Calculate RSSI range (difference between max and min)
+  int rssiRange = device.maxRssi - device.minRssi;
+
+  if (rssiRange < MIN_RSSI_RANGE) {
+    return 0.0f;
+  }
 
   if (device.totalCount >= MIN_DETECTIONS) {
-    score += 0.25f * (float)std::min(device.totalCount, 30) / 30.0f;
-    factors++;
+    score += 0.20f * (float)std::min(device.totalCount, 30) / 30.0f;
+  } else {
+    return 0.0f;
   }
 
   int windowsActive = 0;
@@ -252,8 +262,9 @@ float calculatePersistenceScore(DeviceInfo &device, unsigned long currentTime) {
     if (device.windows[i].detections > 0) windowsActive++;
   }
   if (windowsActive >= MIN_WINDOWS) {
-    score += 0.30f * (float)windowsActive / 4.0f;
-    factors++;
+    score += 0.25f * (float)windowsActive / 4.0f;
+  } else {
+    return 0.0f;
   }
 
   bool isConnected = true;
@@ -271,16 +282,14 @@ float calculatePersistenceScore(DeviceInfo &device, unsigned long currentTime) {
     }
     if (isConnected) {
       score += 0.25f;
-      factors++;
     }
   }
 
-  if (device.stableRssiCount > 5 || device.variationCount > 5) {
-    score += 0.20f * (float)std::min(device.variationCount, 10) / 10.0f;
-    factors++;
+  if (device.variationCount >= 3) { // sketchy variance
+    score += 0.30f * (float)std::min(device.variationCount, 10) / 10.0f;
   }
 
-  return (factors > 0) ? score : 0.0f;
+  return score;
 }
 
 void moveToTop(int index) {
@@ -335,6 +344,10 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime,
       trackedDevices[i].lastSeen = currentTime;
       trackedDevices[i].rssiSum += rssi;
       trackedDevices[i].rssiCount++;
+
+      // Track RSSI range for movement detection
+      if (rssi < trackedDevices[i].minRssi) trackedDevices[i].minRssi = rssi;
+      if (rssi > trackedDevices[i].maxRssi) trackedDevices[i].maxRssi = rssi;
 
       trackedDevices[i].timestamps[trackedDevices[i].tsIdx] = currentTime;
       trackedDevices[i].tsIdx =
@@ -425,6 +438,8 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime,
     trackedDevices[0].rssiSum = rssi;
     trackedDevices[0].rssiCount = 1;
     trackedDevices[0].lastRssi = rssi;
+    trackedDevices[0].minRssi = rssi;
+    trackedDevices[0].maxRssi = rssi;
     trackedDevices[0].timestamps[0] = currentTime;
     trackedDevices[0].tsIdx = 1;
     trackedDevices[0].tsCount = 1;
@@ -502,8 +517,14 @@ void alertUser(bool isSpecial, const char *name, const char *mac, float persiste
     delay(50);
   }
 
+  // Force display reset after alert dismissal to prevent race condition
+  M5.Display.fillScreen(BLACK);
   M5.Display.setTextColor(WHITE);
   M5.Display.setTextSize(1);
+  lastStateHash = 0;  // Force redraw on next update
+  screenOn = true;
+  lastActivityTime = millis();
+  M5.Display.setBrightness(highBrightness ? 204 : 77);
 }
 
 void showFeedback(const char* msg, uint16_t color, const char* sub = NULL) {
