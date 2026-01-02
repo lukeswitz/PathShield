@@ -1198,6 +1198,8 @@ void clearDevices() {
 
   deviceIndex = 0;
   scrollIndex = 0;
+  wifiDeviceIndex = 0;
+  memset(wifiDevices, 0, sizeof(wifiDevices));
   SPIFFS.remove("/devices.txt");
 
   xSemaphoreGive(deviceMutex);
