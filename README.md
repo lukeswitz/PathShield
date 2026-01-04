@@ -38,6 +38,9 @@ PathShield is an RF awareness tool for M5StickC-Plus (v1 & v2). It uses BLE/WiFI
 - **24,500+ MAC Database**: Offline manufacturer identification (WiFi/BLE + consumer/IoT devices)
 - **Efficient Updates**: Only redraws display when data changes (reduces power draw)
 
+![image](https://github.com/user-attachments/assets/fade8692-0052-4e00-b244-b068992c8772)
+
+
 > [!TIP]
 > Modify `allowlistMacs` to ignore known devices.
 >
