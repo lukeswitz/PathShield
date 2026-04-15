@@ -1,7 +1,7 @@
 <div align="center">
 <img height="500" alt="image" src="https://github.com/user-attachments/assets/0dac6a9f-32a8-4b05-b6a1-b59fc3762f51" />
 
-PathShield is an RF awareness tool for M5StickC-Plus (v1 & v2). It uses BLE/WiFI scanning to detect devices, alerting on those following you.
+PathShield is an RF awareness tool for M5StickC Plus 1.1 and Plus 2. It uses BLE/WiFi scanning to detect nearby devices, alerting on those following you.
 </div>
 
 
@@ -28,11 +28,14 @@ PathShield is an RF awareness tool for M5StickC-Plus (v1 & v2). It uses BLE/WiFI
 
 ## Features
 
-- **Dual-Band Scanning**: Alternates WiFi and BLE detection, displays MAC, vendor, SSID, channel, hit count & RSSI.
-- **Persistence Scoring**: Multi-factor algorithm reduces false positives. Allowlist for known devices.
-- **Real-Time Alerts**: Visual notifications for detected trackers and user specified MAC targets
-- **24,500+ MAC Database**: Offline manufacturer identification (WiFi/BLE + consumer/IoT devices)
-- **Efficient Updates**: Only redraws display when data changes (reduces power draw)
+- **Dual-Band Scanning**: Alternates WiFi and BLE detection, displays MAC, vendor, SSID, channel, hit count & RSSI
+- **Persistence Scoring**: Multi-factor algorithm reduces false positives. Allowlist for known devices
+- **Real-Time Alerts**: Visual notifications for detected trackers and user-specified MAC targets
+- **Tracker Detection**: AirTag, Tile, SmartTag, Chipolo, Google FMDN identified by protocol
+- **Known Device Ring Buffer**: Stable-RSSI devices promoted to compact storage, freeing active slots
+- **24,500+ MAC Database**: Offline manufacturer identification
+- **Hardware Adaptive**: Auto-detects CPlus2 PSRAM for 2x device tracking capacity
+- **Dynamic Memory Scaling**: Device limits scale to available heap at boot
 
 > [!TIP]
 > Modify `allowlistMacs` to ignore known devices.
@@ -45,20 +48,24 @@ PathShield is an RF awareness tool for M5StickC-Plus (v1 & v2). It uses BLE/WiFI
 [Install PathShield](https://lukeswitz.github.io/PathShield/)
 
 1. Open link in Chrome, Edge, or Opera (not Safari/Firefox)
-2. Connect device via USB-C
-3. Click "Deploy Firmware"
-4. Select serial port, click "Connect"
-5. Select "Install PathShield"
-6. Optional: Choose "Erase device" (to clear artifact SPIFFS data)
-7. Select "Next" > Install
-8. Wait ~2 minutes for it to complete
+2. Select your hardware (Plus 1.1 or Plus 2)
+3. Connect device via USB-C
+4. Click "Deploy Firmware"
+5. Select serial port, wait ~2 minutes
 
-### From Source w/Arduino IDE
+### From Source (Arduino IDE)
 
-1. Install M5Unified library
-2. Board: **M5Stick-C-Plus**
+**M5StickC Plus 1.1:**
+1. Board: **M5StickCPlus**
+2. PSRAM: **Disabled**
 3. Partition: **Huge APP (3MB No OTA/1MB SPIFFS)**
-4. Upload sketch
+
+**M5StickC Plus 2:**
+1. Board: **M5StickCPlus2**
+2. PSRAM: **Enabled**
+3. Partition: **8M with spiffs (3MB APP/1.5MB SPIFFS)**
+
+Both require M5Unified and NimBLE-Arduino libraries.
 
 
 ## Controls
@@ -227,8 +234,6 @@ M5.Display.drawFastHLine(0, 0, SCREEN_WIDTH, MAGENTA);  // Border color
 
 ## Troubleshooting
 
-> Tested with M5stickCPlus-v1 and v2. Support for more devices can be requested by opening a ticket
-
 ### No Alerts for Known Tracker
 
 **Solution:**
@@ -262,27 +267,11 @@ Hold Button B for 1 full second (not just tap).
 
 ### Device Crashes / Resets
 
-**First try:** Lower sensitivity to reduce memory load
-```cpp
-#define MAX_DEVICES 50          // Reduce tracked devices
-#define MAX_WIFI_DEVICES 25     // Reduce WiFi scanning
-```
+Watch the memory bar on screen — red means critically low. Device limits scale dynamically at boot based on available heap.
 
-**Still crashing?** Disable WiFi scanning to use BLE only
-```cpp
-bool scanningWiFi = false;  // Only scan Bluetooth
-```
+### SPIFFS Format on First Boot
 
-Watch the memory bar on screen—red means critically low.
-
-### SPIFFS Upload Failed
-
-1. Close Serial Monitor (it blocks uploads)
-2. Verify board: **M5Stick-C-Plus**
-3. Verify partition: **Huge APP (3MB No OTA/1MB SPIFFS)**
-4. Try again
-
-If still failing, use the [Web Flasher](https://lukeswitz.github.io/PathShield/) instead.
+Normal on first flash. The device formats SPIFFS automatically (~30 seconds), then boots normally.
 
 ### Button Not Responding
 
@@ -291,13 +280,23 @@ If still failing, use the [Web Flasher](https://lukeswitz.github.io/PathShield/)
 - For menu: hold both buttons 300ms+
 
 
+## Hardware
+
+| | M5StickC Plus 1.1 | M5StickC Plus 2 |
+|---|---|---|
+| **SoC** | ESP32-PICO-D4 | ESP32-PICO-V3-02 |
+| **Flash** | 4MB | 8MB |
+| **PSRAM** | None | 2MB |
+| **Device Limits** | ~50 BLE, ~50 WiFi | ~70 BLE, ~50 WiFi |
+
+Separate firmware builds required per board (different PSRAM/partition configs).
+
 ## Known Limitations
 
-1. **MAC Randomization**: Modern phones randomize MACs - use name filter
+1. **MAC Randomization**: Modern phones randomize MACs — use name filter
 2. **Range Limited**: BLE/WiFi ranges vary by environment
 3. **No GPS**: Detects proximity only, not location
 4. **Battery**: Continuous dual-band scanning drains battery in 4-6 hours
-5. **iOS Privacy**: Cannot always detect randomized/iOS devices
 
 ## Credits
 

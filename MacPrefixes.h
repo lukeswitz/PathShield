@@ -24592,8 +24592,11 @@ const MacPrefix macPrefixes[] = {
 
 const int macPrefixCount = sizeof(macPrefixes) / sizeof(macPrefixes[0]);
 
-String getManufacturer(const char* macAddress) {
-  if (!macAddress || strlen(macAddress) < 8) return F("Unknown");
+void getManufacturer(const char* macAddress, char* out, size_t outLen) {
+  if (!macAddress || strlen(macAddress) < 8 || !out || outLen == 0) {
+    if (out && outLen > 0) { strncpy(out, "Unknown", outLen - 1); out[outLen - 1] = '\0'; }
+    return;
+  }
 
   char prefix[9];
   strncpy(prefix, macAddress, 8);
@@ -24609,11 +24612,14 @@ String getManufacturer(const char* macAddress) {
   // Linear search (could use binary search if sorted)
   for (int i = 0; i < macPrefixCount; i++) {
     if (strncmp(prefix, macPrefixes[i].prefix, 8) == 0) {
-      return String(macPrefixes[i].manufacturer);
+      strncpy(out, macPrefixes[i].manufacturer, outLen - 1);
+      out[outLen - 1] = '\0';
+      return;
     }
   }
 
-  return F("Unknown");
+  strncpy(out, "Unknown", outLen - 1);
+  out[outLen - 1] = '\0';
 }
 
 #endif

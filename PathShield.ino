@@ -1,8 +1,5 @@
 #include <M5Unified.h>
-#include <BLEDevice.h>
-#include <BLEUtils.h>
-#include <BLEScan.h>
-#include <BLEAdvertisedDevice.h>
+#include <NimBLEDevice.h>
 #include "MacPrefixes.h"
 #include <algorithm>
 #include <SPIFFS.h>
@@ -13,12 +10,19 @@
 #define SCREEN_HEIGHT 135
 #define DEFAULT_SCREEN_TIMEOUT 30000
 
-// Memory constants, TWEAK THESE FOR RF DENSITY
-#define MAX_DEVICES 50
-#define MAX_WIFI_DEVICES 50
+// Memory constants — scaled at runtime based on free heap
+#define MIN_DEVICES 25
+#define MAX_DEVICES_CAP 70
+#define MIN_WIFI_DEVICES 25
+#define MAX_WIFI_DEVICES_CAP 50
 #define DETECTION_WINDOW 300
 #define IDLE_TIMEOUT 30000
-#define MAX_TIMESTAMPS 16
+#define MAX_TIMESTAMPS 20
+
+// Runtime device limits (set dynamically at boot based on free heap)
+int maxDevices = MIN_DEVICES;
+int maxWifiDevices = MIN_WIFI_DEVICES;
+bool hasPsram = false;
 
 #define BLUE_GREY 0x5D9B
 
@@ -37,11 +41,9 @@
 #define RSSI_VARIATION_THRESHOLD 15
 #define EPSILON_CONNECTED_GAP 180
 #define MIN_RSSI_RANGE 12
+#define RSSI_FLOOR -80
 
-#define ESTIMATED_BLE_STACK_KB 75
-#define ESTIMATED_WIFI_STACK_KB 60
-#define ESTIMATED_APP_USAGE_KB 30
-#define AVAILABLE_FOR_DEVICES_KB 100
+#define ESTIMATED_APP_RESERVE_KB 40
 
 const int MEMORY_CRITICAL = 50;
 const int MEMORY_WARNING = 80;
@@ -83,7 +85,7 @@ struct WiFiDeviceInfo {
   int detectionCount;
 };
 
-WiFiDeviceInfo wifiDevices[MAX_WIFI_DEVICES];
+WiFiDeviceInfo *wifiDevices = NULL;
 int wifiDeviceIndex = 0;
 bool scanningWiFi = true;
 unsigned long lastScanSwitch = 0;
@@ -91,6 +93,31 @@ const unsigned long SCAN_SWITCH_INTERVAL = 3000;
 
 // Privacy Invader Defaults: Axon cameras, Liteon Technology (Flock), Utility Inc (Flock) OUIs
 const char *specialMacs[] = {"00:25:DF", "14:5A:FC", "00:09:BC"};
+
+// BLE Tracker Type Detection
+enum TrackerType : uint8_t {
+  TRACKER_NONE = 0,
+  TRACKER_AIRTAG,
+  TRACKER_TILE,
+  TRACKER_SMARTTAG,
+  TRACKER_CHIPOLO,
+  TRACKER_GOOGLE_FMDN,
+  TRACKER_PRIVACY_INVADER,
+  TRACKER_PERSISTENCE
+};
+
+const char* trackerTypeName(uint8_t type) {
+  switch (type) {
+    case TRACKER_AIRTAG:         return "AirTag";
+    case TRACKER_TILE:           return "Tile";
+    case TRACKER_SMARTTAG:       return "SmartTag";
+    case TRACKER_CHIPOLO:        return "Chipolo";
+    case TRACKER_GOOGLE_FMDN:    return "Google FMDN";
+    case TRACKER_PRIVACY_INVADER:return "Privacy Inv";
+    case TRACKER_PERSISTENCE:    return "Persistence";
+    default:                     return "Unknown";
+  }
+}
 
 // IGNORE LIST: Add MAC prefixes of YOUR devices here to ignore them
 // Example: const char *allowlistMacs[] = {"AA:BB:CC", "DD:EE:FF", "11:22:33"};
@@ -125,19 +152,41 @@ struct DeviceInfo {
   unsigned long timestamps[MAX_TIMESTAMPS];
   uint8_t tsIdx;
   uint8_t tsCount;
+  uint8_t trackerType;
 };
 
-DeviceInfo trackedDevices[MAX_DEVICES];
+DeviceInfo *trackedDevices = NULL;
 int deviceIndex = 0;
-BLEScan *pBLEScan;
+void updateTimeWindows(DeviceInfo &device, unsigned long currentTime);
+float calculatePersistenceScore(DeviceInfo &device, unsigned long currentTime);
+NimBLEScan *pBLEScan;
 int scrollIndex = 0;
+
+// Known device ring buffer — compact storage for stable-RSSI devices
+#define MIN_KNOWN 40
+#define MAX_KNOWN_CAP 80
+#define KNOWN_PROMOTE_COUNT 8
+#define KNOWN_RSSI_DRIFT 20
+#define KNOWN_EXPIRY_WINDOW (DETECTION_WINDOW * 2)
+
+struct KnownDevice {
+  char address[18];
+  unsigned long lastSeen;
+  int avgRssi;
+  uint8_t seenCount;
+};
+
+KnownDevice *knownDevices = NULL;
+int knownDeviceCount = 0;
+int maxKnownDevices = MIN_KNOWN;
 
 SemaphoreHandle_t deviceMutex = NULL;
 TaskHandle_t scanTaskHandle = NULL;
 volatile bool scanTaskRunning = true;
+uint32_t initialFreeHeapKB = 40;  // Set after allocations in setup()
 
-class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
-  void onResult(BLEAdvertisedDevice advertisedDevice) {}
+class MyScanCallbacks : public NimBLEScanCallbacks {
+  void onResult(const NimBLEAdvertisedDevice* advertisedDevice) override {}
 };
 
 bool isSpecialMac(const char *address) {
@@ -159,6 +208,74 @@ bool isAllowlistedMac(const char *address) {
   return false;
 }
 
+// Detect known BLE tracker types from advertisement data
+uint8_t detectTrackerType(const NimBLEAdvertisedDevice &device) {
+  // Check manufacturer data (company ID is first 2 bytes, little-endian)
+  if (device.haveManufacturerData()) {
+    std::string mfgData = device.getManufacturerData();
+    if (mfgData.length() >= 2) {
+      uint16_t companyId = (uint8_t)mfgData[0] | ((uint8_t)mfgData[1] << 8);
+
+      // Apple AirTag: company ID 0x004C with 27+ bytes of payload
+      // Also catches Find My network accessories (Chipolo ONE Spot, Eufy in FM mode)
+      if (companyId == 0x004C && mfgData.length() >= 27) {
+        // AirTag/Find My devices have specific payload type byte at offset 2
+        uint8_t payloadType = (uint8_t)mfgData[2];
+        if (payloadType == 0x12 || payloadType == 0x07) {
+          return TRACKER_AIRTAG;
+        }
+      }
+
+      // Samsung SmartTag: company ID 0x0075
+      if (companyId == 0x0075) {
+        return TRACKER_SMARTTAG;
+      }
+
+      // Chipolo (native mode, not Find My): company ID 0x0133
+      if (companyId == 0x0133) {
+        return TRACKER_CHIPOLO;
+      }
+
+      // Google Find My Device Network: company ID 0x00E0
+      if (companyId == 0x00E0) {
+        return TRACKER_GOOGLE_FMDN;
+      }
+    }
+  }
+
+  // Check service UUIDs
+  if (device.haveServiceUUID()) {
+    // Tile: service UUID 0xFD51 or 0xFD52
+    if (device.isAdvertisingService(NimBLEUUID((uint16_t)0xFD51)) ||
+        device.isAdvertisingService(NimBLEUUID((uint16_t)0xFD52))) {
+      return TRACKER_TILE;
+    }
+
+    // Samsung SmartThings/Find: service UUID 0xFD6F
+    if (device.isAdvertisingService(NimBLEUUID((uint16_t)0xFD6F))) {
+      return TRACKER_SMARTTAG;
+    }
+  }
+
+  // Check device name as fallback
+  std::string devName = device.getName();
+  if (devName.length() > 0) {
+    // Convert to lowercase for comparison
+    char nameLower[21];
+    size_t len = std::min(devName.length(), (size_t)20);
+    for (size_t i = 0; i < len; i++) {
+      nameLower[i] = tolower(devName[i]);
+    }
+    nameLower[len] = '\0';
+
+    if (strstr(nameLower, "tile"))     return TRACKER_TILE;
+    if (strstr(nameLower, "smarttag")) return TRACKER_SMARTTAG;
+    if (strstr(nameLower, "chipolo"))  return TRACKER_CHIPOLO;
+  }
+
+  return TRACKER_NONE;
+}
+
 void trackWiFiDevice(const char *ssid, const char *bssid, int rssi, int channel,
                      int encType, unsigned long currentTime) {
   for (int i = 0; i < wifiDeviceIndex; i++) {
@@ -170,7 +287,7 @@ void trackWiFiDevice(const char *ssid, const char *bssid, int rssi, int channel,
     }
   }
 
-  if (wifiDeviceIndex < MAX_WIFI_DEVICES) {
+  if (wifiDeviceIndex < maxWifiDevices) {
     strncpy(wifiDevices[wifiDeviceIndex].ssid, ssid, 32);
     wifiDevices[wifiDeviceIndex].ssid[32] = '\0';
     strncpy(wifiDevices[wifiDeviceIndex].bssid, bssid, 17);
@@ -335,11 +452,15 @@ int findEvictionCandidate() {
 }
 
 bool trackDevice(const char *address, int rssi, unsigned long currentTime,
-                 const char *name) {
+                 const char *name, uint8_t detectedTracker = TRACKER_NONE) {
   bool newTracker = false;
 
   for (int i = 0; i < deviceIndex; i++) {
     if (strcmp(trackedDevices[i].address, address) == 0) {
+      // Update tracker type if newly identified
+      if (detectedTracker != TRACKER_NONE && trackedDevices[i].trackerType == TRACKER_NONE) {
+        trackedDevices[i].trackerType = detectedTracker;
+      }
       trackedDevices[i].totalCount++;
       trackedDevices[i].lastSeen = currentTime;
       trackedDevices[i].rssiSum += rssi;
@@ -371,15 +492,24 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime,
         trackedDevices[i].name[20] = '\0';
       }
 
-      String mfg = getManufacturer(address);
-      strncpy(trackedDevices[i].manufacturer, mfg.c_str(), 30);
-      trackedDevices[i].manufacturer[30] = '\0';
+      getManufacturer(address, trackedDevices[i].manufacturer, 31);
 
       updateTimeWindows(trackedDevices[i], currentTime);
       trackedDevices[i].persistenceScore =
           calculatePersistenceScore(trackedDevices[i], currentTime);
 
       if (isSpecialMac(address)) {
+        trackedDevices[i].detected = true;
+        trackedDevices[i].isSpecial = true;
+        if (trackedDevices[i].trackerType == TRACKER_NONE)
+          trackedDevices[i].trackerType = TRACKER_PRIVACY_INVADER;
+        if (!trackedDevices[i].alertTriggered) {
+          trackedDevices[i].alertTriggered = true;
+          newTracker = true;
+        }
+        moveToTop(i);
+      } else if (trackedDevices[i].trackerType != TRACKER_NONE) {
+        // Known tracker type detected via BLE signature — immediate alert
         trackedDevices[i].detected = true;
         trackedDevices[i].isSpecial = true;
         if (!trackedDevices[i].alertTriggered) {
@@ -390,6 +520,7 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime,
       } else if (trackedDevices[i].persistenceScore >= PERSISTENCE_THRESHOLD) {
         trackedDevices[i].detected = true;
         trackedDevices[i].isSpecial = false;
+        trackedDevices[i].trackerType = TRACKER_PERSISTENCE;
         if (!trackedDevices[i].alertTriggered) {
           trackedDevices[i].alertTriggered = true;
           newTracker = true;
@@ -402,7 +533,7 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime,
 
   int targetIndex = -1;
 
-  if (deviceIndex < MAX_DEVICES) {
+  if (deviceIndex < maxDevices) {
     for (int j = deviceIndex; j > 0; j--) {
       trackedDevices[j] = trackedDevices[j - 1];
     }
@@ -428,9 +559,7 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime,
       trackedDevices[0].name[20] = '\0';
     }
 
-    String mfg = getManufacturer(address);
-    strncpy(trackedDevices[0].manufacturer, mfg.c_str(), 30);
-    trackedDevices[0].manufacturer[30] = '\0';
+    getManufacturer(address, trackedDevices[0].manufacturer, 31);
 
     trackedDevices[0].totalCount = 1;
     trackedDevices[0].firstSeen = currentTime;
@@ -443,8 +572,17 @@ bool trackDevice(const char *address, int rssi, unsigned long currentTime,
     trackedDevices[0].timestamps[0] = currentTime;
     trackedDevices[0].tsIdx = 1;
     trackedDevices[0].tsCount = 1;
+    trackedDevices[0].trackerType = detectedTracker;
 
     if (isSpecialMac(address)) {
+      trackedDevices[0].detected = true;
+      trackedDevices[0].isSpecial = true;
+      trackedDevices[0].alertTriggered = true;
+      if (trackedDevices[0].trackerType == TRACKER_NONE)
+        trackedDevices[0].trackerType = TRACKER_PRIVACY_INVADER;
+      newTracker = true;
+    } else if (detectedTracker != TRACKER_NONE) {
+      // Known tracker type on first sight — immediate alert
       trackedDevices[0].detected = true;
       trackedDevices[0].isSpecial = true;
       trackedDevices[0].alertTriggered = true;
@@ -467,9 +605,92 @@ void removeOldEntries(unsigned long currentTime) {
       i--;
     }
   }
+
+  // Promote stable devices to known buffer
+  for (int i = 0; i < deviceIndex; i++) {
+    if (trackedDevices[i].alertTriggered || trackedDevices[i].isSpecial) continue;
+    if (trackedDevices[i].totalCount >= KNOWN_PROMOTE_COUNT &&
+        (trackedDevices[i].maxRssi - trackedDevices[i].minRssi) < MIN_RSSI_RANGE) {
+      promoteToKnown(i, currentTime);
+      i--;
+    }
+  }
 }
 
-void alertUser(bool isSpecial, const char *name, const char *mac, float persistence) {
+// --- Known device ring buffer functions ---
+
+int findKnownDevice(const char *address) {
+  for (int i = 0; i < knownDeviceCount; i++) {
+    if (strcmp(knownDevices[i].address, address) == 0) return i;
+  }
+  return -1;
+}
+
+void promoteToKnown(int trackedIdx, unsigned long currentTime) {
+  int ki = findKnownDevice(trackedDevices[trackedIdx].address);
+  if (ki == -1) {
+    // Find slot: use next empty or evict oldest
+    if (knownDeviceCount < maxKnownDevices) {
+      ki = knownDeviceCount++;
+    } else {
+      ki = 0;
+      unsigned long oldest = knownDevices[0].lastSeen;
+      for (int i = 1; i < knownDeviceCount; i++) {
+        if (knownDevices[i].lastSeen < oldest) {
+          oldest = knownDevices[i].lastSeen;
+          ki = i;
+        }
+      }
+    }
+  }
+
+  strncpy(knownDevices[ki].address, trackedDevices[trackedIdx].address, 17);
+  knownDevices[ki].address[17] = '\0';
+  knownDevices[ki].lastSeen = currentTime;
+  knownDevices[ki].avgRssi = trackedDevices[trackedIdx].rssiSum /
+                              trackedDevices[trackedIdx].rssiCount;
+  knownDevices[ki].seenCount = (uint8_t)std::min(trackedDevices[trackedIdx].totalCount, 255);
+
+  // Remove from tracked array
+  for (int j = trackedIdx; j < deviceIndex - 1; j++) {
+    trackedDevices[j] = trackedDevices[j + 1];
+  }
+  deviceIndex--;
+}
+
+// Returns true if device was handled as known (caller should skip trackDevice)
+bool handleKnownDevice(const char *address, int rssi, unsigned long currentTime) {
+  int ki = findKnownDevice(address);
+  if (ki == -1) return false;
+
+  // Check if RSSI drifted significantly — device or user is moving
+  if (abs(rssi - knownDevices[ki].avgRssi) > KNOWN_RSSI_DRIFT) {
+    // De-promote: remove from known, let it enter full tracking
+    knownDevices[ki] = knownDevices[knownDeviceCount - 1];
+    knownDeviceCount--;
+    return false;
+  }
+
+  // Still stable — just update and skip full tracking
+  knownDevices[ki].lastSeen = currentTime;
+  if (knownDevices[ki].seenCount < 255) knownDevices[ki].seenCount++;
+  // Exponential moving average for RSSI
+  knownDevices[ki].avgRssi = (knownDevices[ki].avgRssi * 3 + rssi) / 4;
+  return true;
+}
+
+void removeOldKnownEntries(unsigned long currentTime) {
+  for (int i = 0; i < knownDeviceCount; i++) {
+    if (currentTime - knownDevices[i].lastSeen > KNOWN_EXPIRY_WINDOW) {
+      knownDevices[i] = knownDevices[knownDeviceCount - 1];
+      knownDeviceCount--;
+      i--;
+    }
+  }
+}
+
+void alertUser(bool isSpecial, const char *name, const char *mac,
+               float persistence, uint8_t tType = TRACKER_NONE) {
 
   screenOn = true;
   lastActivityTime = millis();
@@ -494,7 +715,13 @@ void alertUser(bool isSpecial, const char *name, const char *mac, float persiste
 
   M5.Display.setCursor(0, 40);
   M5.Display.print("Type: ");
-  M5.Display.print(isSpecial ? "KNOWN" : "SUSPECTED");
+  if (tType != TRACKER_NONE) {
+    M5.Display.setTextColor(RED);
+    M5.Display.print(trackerTypeName(tType));
+  } else {
+    M5.Display.print(isSpecial ? "KNOWN" : "SUSPECTED");
+  }
+  M5.Display.setTextColor(WHITE);
 
   M5.Display.setCursor(0, 55);
   M5.Display.print("Name: ");
@@ -581,7 +808,7 @@ void displayStartupMessage() {
 
   M5.Display.setTextColor(DARKGREY);
   M5.Display.setCursor(85, 72);
-  M5.Display.print("v2.4 Color");
+  M5.Display.print("v1.2.1");
 
   M5.Display.drawFastHLine(0, 85, SCREEN_WIDTH, MAGENTA);
 
@@ -683,18 +910,15 @@ void drawTopBar() {
   uint32_t freeHeap = ESP.getFreeHeap();
   uint32_t freeKB = freeHeap / 1024;
 
-  // Scale memory display: 20 KB = 100%, 5 KB = 0%
-  const int MEMORY_MAX_KB = 20;
-  const int MEMORY_MIN_KB = 5;
-  
-  int memPercent = ((freeKB - MEMORY_MIN_KB) * 100) / (MEMORY_MAX_KB - MEMORY_MIN_KB);
+  // Scale memory display dynamically: initialFreeHeapKB = 100%, 0 = 0%
+  int memPercent = (initialFreeHeapKB > 0) ? (freeKB * 100) / initialFreeHeapKB : 0;
   if (memPercent > 100) memPercent = 100;
   if (memPercent < 0) memPercent = 0;
 
   barX = 155;
   uint16_t memColor = GREEN;
-  if (memPercent < 40) memColor = YELLOW;
-  if (memPercent < 20) memColor = RED;
+  if (freeKB < MEMORY_WARNING) memColor = YELLOW;
+  if (freeKB < MEMORY_CRITICAL) memColor = RED;
 
   M5.Display.setCursor(135, 3);
   M5.Display.setTextColor(BLUE_GREY);
@@ -715,9 +939,10 @@ void drawTopBar() {
 
 // Generate hashed display state
 uint32_t getDisplayStateHash() {
-  uint32_t hash = 0;
-  
-  hash = deviceIndex * 31 + wifiDeviceIndex;
+  uint32_t hash = 1;
+
+  hash = hash * 31 + deviceIndex;
+  hash = hash * 31 + wifiDeviceIndex;
   hash = hash * 31 + scrollIndex;
   hash = hash * 31 + (scanningWiFi ? 1 : 0);
   hash = hash * 31 + (paused ? 1 : 0);
@@ -775,6 +1000,16 @@ void displayTrackedDevices() {
   M5.Display.fillScreen(BLACK);
   drawTopBar();
 
+  // Show scanning message when no devices found yet
+  if (deviceIndex == 0 && wifiDeviceIndex == 0) {
+    M5.Display.setTextSize(2);
+    M5.Display.setTextColor(DARKGREY);
+    M5.Display.setCursor(55, 60);
+    M5.Display.print("Scanning...");
+    xSemaphoreGive(deviceMutex);
+    return;
+  }
+
   int y = 15;
   int displayed = 0;
   const int maxDisplay = 3;
@@ -806,10 +1041,8 @@ void displayTrackedDevices() {
       M5.Display.setTextSize(1);
       M5.Display.setCursor(2, y);
       M5.Display.setTextColor(YELLOW);
-      String mfg = getManufacturer(wifiDevices[i].bssid);
       char mfgDisplay[28];
-      strncpy(mfgDisplay, mfg.c_str(), 27);
-      mfgDisplay[27] = '\0';
+      getManufacturer(wifiDevices[i].bssid, mfgDisplay, 28);
       M5.Display.print(mfgDisplay);
       y += 9;
 
@@ -844,7 +1077,7 @@ void displayTrackedDevices() {
     }
   } else {
     int filteredCount = 0;
-    int sortedIndices[MAX_DEVICES];
+    int sortedIndices[MAX_DEVICES_CAP];
 
     for (int i = 0; i < deviceIndex; i++) {
       if (filterByName && strlen(trackedDevices[i].name) == 0) continue;
@@ -909,12 +1142,25 @@ void displayTrackedDevices() {
 
       M5.Display.setTextSize(1);
       M5.Display.setCursor(2, y);
-      M5.Display.setTextColor(YELLOW);
 
-      char mfgDisplay[28];
-      strncpy(mfgDisplay, trackedDevices[i].manufacturer, 27);
-      mfgDisplay[27] = '\0';
-      M5.Display.print(mfgDisplay);
+      // Show tracker type badge if identified, otherwise manufacturer
+      if (trackedDevices[i].trackerType != TRACKER_NONE) {
+        M5.Display.setTextColor(RED);
+        M5.Display.print("[");
+        M5.Display.print(trackerTypeName(trackedDevices[i].trackerType));
+        M5.Display.print("] ");
+        M5.Display.setTextColor(YELLOW);
+        char mfgShort[16];
+        strncpy(mfgShort, trackedDevices[i].manufacturer, 15);
+        mfgShort[15] = '\0';
+        M5.Display.print(mfgShort);
+      } else {
+        M5.Display.setTextColor(YELLOW);
+        char mfgDisplay[28];
+        strncpy(mfgDisplay, trackedDevices[i].manufacturer, 27);
+        mfgDisplay[27] = '\0';
+        M5.Display.print(mfgDisplay);
+      }
       y += 9;
 
       M5.Display.setTextSize(1);
@@ -1399,23 +1645,40 @@ void scanTask(void *parameter) {
 
     } else {
       // BLE Scan (blocking)
-      BLEScanResults *foundDevicesPtr = pBLEScan->start(2, false);
+      NimBLEScanResults foundDevices = pBLEScan->getResults(2000, false);
 
-      if (foundDevicesPtr) {
+      {
         bool newTrackerFound = false;
         int alertDeviceIdx = -1;
 
         if (xSemaphoreTake(deviceMutex, pdMS_TO_TICKS(2000)) == pdTRUE) {
-          int count = foundDevicesPtr->getCount();
+          int count = foundDevices.getCount();
           for (int i = 0; i < count; i++) {
-            BLEAdvertisedDevice device = foundDevicesPtr->getDevice(i);
-            String macAddr = device.getAddress().toString().c_str();
+            const NimBLEAdvertisedDevice *device = foundDevices.getDevice(i);
+            if (!device) continue;
+            char macAddr[18];
+            strncpy(macAddr, device->getAddress().toString().c_str(), 17);
+            macAddr[17] = '\0';
 
-            if (!isAllowlistedMac(macAddr.c_str())) {
-              if (trackDevice(macAddr.c_str(), device.getRSSI(), currentTime,
-                              device.getName().c_str())) {
-                newTrackerFound = true;
-                alertDeviceIdx = 0;
+            // Skip weak signals — not worth tracking
+            if (device->getRSSI() < RSSI_FLOOR) continue;
+
+            if (!isAllowlistedMac(macAddr)) {
+              uint8_t tType = detectTrackerType(*device);
+
+              // Known trackers bypass the known-device buffer entirely
+              if (tType != TRACKER_NONE) {
+                if (trackDevice(macAddr, device->getRSSI(), currentTime,
+                                device->getName().c_str(), tType)) {
+                  newTrackerFound = true;
+                  alertDeviceIdx = 0;
+                }
+              } else if (!handleKnownDevice(macAddr, device->getRSSI(), currentTime)) {
+                if (trackDevice(macAddr, device->getRSSI(), currentTime,
+                                device->getName().c_str())) {
+                  newTrackerFound = true;
+                  alertDeviceIdx = 0;
+                }
               }
             }
             vTaskDelay(1 / portTICK_PERIOD_MS);
@@ -1428,6 +1691,7 @@ void scanTask(void *parameter) {
           char alertName[21];
           char alertAddr[18];
           float alertScore = 0.0f;
+          uint8_t alertTrackerType = TRACKER_NONE;
 
           if (xSemaphoreTake(deviceMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
             if (deviceIndex > 0) {
@@ -1437,12 +1701,13 @@ void scanTask(void *parameter) {
               strncpy(alertAddr, trackedDevices[0].address, 17);
               alertAddr[17] = '\0';
               alertScore = trackedDevices[0].persistenceScore;
+              alertTrackerType = trackedDevices[0].trackerType;
             }
             xSemaphoreGive(deviceMutex);
           }
 
           if (deviceIndex > 0) {
-            alertUser(isSpecial, alertName, alertAddr, alertScore);
+            alertUser(isSpecial, alertName, alertAddr, alertScore, alertTrackerType);
           }
         }
 
@@ -1450,10 +1715,11 @@ void scanTask(void *parameter) {
       }
     }
 
-    // Clean up old entries periodically
+    // Clean up old entries periodically (also promotes stable devices to known)
     if (xSemaphoreTake(deviceMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
       removeOldEntries(currentTime);
       removeOldWiFiEntries(currentTime);
+      removeOldKnownEntries(currentTime);
       xSemaphoreGive(deviceMutex);
     }
 
@@ -1490,15 +1756,65 @@ void setup() {
 
   delay(100);
 
-  BLEDevice::init("");
-  pBLEScan = BLEDevice::getScan();
-  pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
+  Serial.printf("Heap before BLE init: %dKB\n", ESP.getFreeHeap() / 1024);
+
+  NimBLEDevice::init("");
+  pBLEScan = NimBLEDevice::getScan();
+  pBLEScan->setScanCallbacks(new MyScanCallbacks());
   pBLEScan->setInterval(1100);
   pBLEScan->setWindow(449);
   pBLEScan->setActiveScan(true);
+  pBLEScan->setDuplicateFilter(true);
 
-  Serial.println("BLE initialized");
+  Serial.printf("Heap after BLE init: %dKB\n", ESP.getFreeHeap() / 1024);
   delay(200);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  Serial.printf("Heap after WiFi init: %dKB\n", ESP.getFreeHeap() / 1024);
+
+  // Detect PSRAM (CPlus2 has 2MB, CPlus1.1 has none)
+  hasPsram = psramFound();
+
+  // Dynamic sizing: PSRAM boards get full caps, heap-only boards scale to fit
+  if (hasPsram) {
+    maxDevices = MAX_DEVICES_CAP;
+    maxWifiDevices = MAX_WIFI_DEVICES_CAP;
+    maxKnownDevices = MAX_KNOWN_CAP;
+    Serial.printf("PSRAM detected: %dKB — device limits: %d BLE, %d WiFi, %d Known\n",
+                  ESP.getPsramSize() / 1024, maxDevices, maxWifiDevices, maxKnownDevices);
+  } else {
+    size_t freeHeap = ESP.getFreeHeap();
+    size_t reserveBytes = ESTIMATED_APP_RESERVE_KB * 1024;
+    size_t availableBytes = (freeHeap > reserveBytes) ? freeHeap - reserveBytes : 0;
+    size_t perSlot = sizeof(DeviceInfo) + sizeof(WiFiDeviceInfo) + sizeof(KnownDevice) * 2;
+    int slots = availableBytes / perSlot;
+    maxDevices = constrain(slots, MIN_DEVICES, MAX_DEVICES_CAP);
+    maxWifiDevices = constrain(slots, MIN_WIFI_DEVICES, MAX_WIFI_DEVICES_CAP);
+    maxKnownDevices = constrain(slots * 2, MIN_KNOWN, MAX_KNOWN_CAP);
+    Serial.printf("No PSRAM — heap: %dKB — device limits: %d BLE, %d WiFi, %d Known\n",
+                  freeHeap / 1024, maxDevices, maxWifiDevices, maxKnownDevices);
+  }
+
+  // Allocate device arrays (PSRAM if available, else internal heap)
+  if (hasPsram) {
+    trackedDevices = (DeviceInfo *)ps_malloc(maxDevices * sizeof(DeviceInfo));
+    wifiDevices = (WiFiDeviceInfo *)ps_malloc(maxWifiDevices * sizeof(WiFiDeviceInfo));
+    knownDevices = (KnownDevice *)ps_malloc(maxKnownDevices * sizeof(KnownDevice));
+  } else {
+    trackedDevices = (DeviceInfo *)malloc(maxDevices * sizeof(DeviceInfo));
+    wifiDevices = (WiFiDeviceInfo *)malloc(maxWifiDevices * sizeof(WiFiDeviceInfo));
+    knownDevices = (KnownDevice *)malloc(maxKnownDevices * sizeof(KnownDevice));
+  }
+  memset(trackedDevices, 0, maxDevices * sizeof(DeviceInfo));
+  memset(wifiDevices, 0, maxWifiDevices * sizeof(WiFiDeviceInfo));
+  memset(knownDevices, 0, maxKnownDevices * sizeof(KnownDevice));
+  Serial.printf("Device arrays allocated: BLE=%dKB WiFi=%dKB Known=%dKB | Heap remaining: %dKB\n",
+                (maxDevices * sizeof(DeviceInfo)) / 1024,
+                (maxWifiDevices * sizeof(WiFiDeviceInfo)) / 1024,
+                (maxKnownDevices * sizeof(KnownDevice)) / 1024,
+                ESP.getFreeHeap() / 1024);
+  initialFreeHeapKB = ESP.getFreeHeap() / 1024;
 
   if (!SPIFFS.begin(false)) {
     Serial.println("SPIFFS corrupted, formatting...");
@@ -1528,7 +1844,7 @@ void setup() {
     M5.Display.setTextSize(1);
     M5.Display.setTextColor(DARKGREY);
     M5.Display.setCursor(35, 90);
-    M5.Display.print("Please wait...");
+    M5.Display.print("Wait 60s...");
 
     SPIFFS.format();
     delay(100);
@@ -1612,7 +1928,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     scanTask,
     "ScanTask",
-    8192,
+    hasPsram ? 16384 : 12288,
     NULL,
     1,
     &scanTaskHandle,

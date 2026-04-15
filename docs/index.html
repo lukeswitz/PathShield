@@ -154,6 +154,50 @@
       background: rgba(0, 255, 0, 0.05);
     }
 
+    .board-selector {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin-bottom: 25px;
+      flex-wrap: wrap;
+    }
+
+    .board-btn {
+      background: #000;
+      color: #0f0;
+      font-family: 'Courier New', 'Courier', monospace;
+      font-size: 0.85rem;
+      padding: 12px 20px;
+      border: 2px solid #0f0;
+      cursor: pointer;
+      letter-spacing: 0.1em;
+      transition: all 0.1s;
+      min-width: 200px;
+      text-align: center;
+    }
+
+    .board-btn:hover {
+      background: rgba(0, 255, 0, 0.15);
+      box-shadow: 0 0 15px rgba(0, 255, 0, 0.4);
+    }
+
+    .board-btn.selected {
+      background: #0f0;
+      color: #000;
+      box-shadow: 0 0 20px rgba(0, 255, 0, 0.8);
+      font-weight: 700;
+    }
+
+    .board-specs {
+      font-size: 0.75rem;
+      margin-top: 6px;
+      opacity: 0.7;
+    }
+
+    .board-btn.selected .board-specs {
+      opacity: 1;
+    }
+
     .status-line {
       font-size: 0.85rem;
       margin-bottom: 20px;
@@ -325,15 +369,28 @@
 | |   | | | | | | | | | /\__/ / | | |_| |_| |___| |___| |_| |
 \_|   \_| |_/ \_/ \_| |_\____/\_| |_/\___/\____/\_____/____/ 
       </div>
-      <div class="tagline">TRACKER DETECTION SYSTEM v2.0</div>
+      <div class="tagline">TRACKER DETECTION SYSTEM v2.1</div>
     </div>
 
     <div class="section">
       <div class="section-title">SYSTEM STATUS</div>
       <div class="install-box">
-        <div class="status-line">FIRMWARE READY FOR DEPLOYMENT <span class="blink">█</span></div>
-        
-        <esp-web-install-button manifest="./manifest.json" erase-first>
+        <div class="status-line">SELECT TARGET HARDWARE <span class="blink">█</span></div>
+
+        <div class="board-selector">
+          <div class="board-btn selected" onclick="selectBoard('cplus1', this)">
+            M5StickC Plus 1.1
+            <div class="board-specs">ESP32-PICO-D4 | 4MB Flash</div>
+          </div>
+          <div class="board-btn" onclick="selectBoard('cplus2', this)">
+            M5StickC Plus 2
+            <div class="board-specs">ESP32-PICO-V3-02 | 8MB Flash | 2MB PSRAM</div>
+          </div>
+        </div>
+
+        <div class="status-line" id="board-status">TARGET: M5StickC Plus 1.1</div>
+
+        <esp-web-install-button id="install-btn" manifest="./manifest-cplus1.json" erase-first>
           <button slot="activate">[ DEPLOY FIRMWARE ]</button>
         </esp-web-install-button>
       </div>
@@ -347,6 +404,7 @@
       </div>
 
       <ul class="steps">
+        <li>Select your hardware variant above (Plus 1.1 or Plus 2)</li>
         <li>Connect M5StickC Plus via USB-C cable to workstation</li>
         <li>Execute firmware deployment sequence (button above)</li>
         <li>Select serial port from browser interface</li>
@@ -365,6 +423,7 @@
         <li>PERSISTENCE ENGINE: Advanced scoring algorithm (false-positive reduction)</li>
         <li>REALTIME DETECTION: Instant visual alerts on tracker identification</li>
         <li>POWER EFFICIENT: Optimized scan cycles for extended operation</li>
+        <li>ADAPTIVE: Auto-detects PSRAM on Plus 2 for 2x device tracking</li>
         <li>PORTABLE: M5StickC Plus form factor for field deployment</li>
       </ul>
     </div>
@@ -394,5 +453,22 @@
       For security research and privacy protection only
     </div>
   </div>
+  <script>
+    const boards = {
+      cplus1: { manifest: './manifest-cplus1.json', name: 'M5StickC Plus 1.1' },
+      cplus2: { manifest: './manifest-cplus2.json', name: 'M5StickC Plus 2' }
+    };
+
+    function selectBoard(board, el) {
+      document.querySelectorAll('.board-btn').forEach(b => b.classList.remove('selected'));
+      el.classList.add('selected');
+
+      const btn = document.getElementById('install-btn');
+      btn.setAttribute('manifest', boards[board].manifest);
+
+      document.getElementById('board-status').textContent =
+        'TARGET: ' + boards[board].name;
+    }
+  </script>
 </body>
 </html>
