@@ -1,4 +1,8 @@
 <div align="center">
+  
+  [![Pre-release](https://img.shields.io/github/v/release/lukeswitz/PathShield?include_prereleases&label=pre-release&color=orange)](https://github.com/lukeswitz/PathShield/releases)
+[![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/lukeswitz/PathShield)](https://github.com/lukeswitz/AntiHunter/tree/main/PathShield/)
+  
 <img height="500" alt="image" src="https://github.com/user-attachments/assets/0dac6a9f-32a8-4b05-b6a1-b59fc3762f51" />
 
 PathShield is an RF awareness tool for M5StickC Plus 1.1 and Plus 2. It uses BLE/WiFi scanning to detect nearby devices, alerting on those following you.
@@ -36,6 +40,9 @@ PathShield is an RF awareness tool for M5StickC Plus 1.1 and Plus 2. It uses BLE
 - **24,500+ MAC Database**: Offline manufacturer identification
 - **Hardware Adaptive**: Auto-detects CPlus2 PSRAM for 2x device tracking capacity
 - **Dynamic Memory Scaling**: Device limits scale to available heap at boot
+
+![image](https://github.com/user-attachments/assets/fade8692-0052-4e00-b244-b068992c8772)
+
 
 > [!TIP]
 > Modify `allowlistMacs` to ignore known devices.
