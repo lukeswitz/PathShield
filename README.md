@@ -139,6 +139,41 @@ GREEN   = Scan active, status messages
 
 ## Detection Algorithm
 
+### How Tracker Identification Works
+
+PathShield uses a **multi-layer packet inspection approach** to reliably identify trackers from BLE advertisement data. Since modern trackers use standardized Bluetooth identifiers, this method catches them regardless of MAC randomization.
+
+**Layer 1: Manufacturer Data (Company IDs)**
+
+BLE packets include manufacturer-specific data identified by a 16-bit company ID (stored little-endian). Known trackers advertise predictable company IDs:
+
+- **AirTag & Find My Devices**: Company ID `0x004C` (Apple Inc.)
+  - Must have ≥27 bytes of payload
+  - Payload type byte at offset 2 must be `0x12` or `0x07` (Find My authentication)
+  - Also catches: Chipolo ONE Spot, Eufy cameras in Find My mode
+
+- **Samsung SmartTag**: Company ID `0x0075` (Samsung Electronics)
+
+- **Chipolo (native mode)**: Company ID `0x0133` (Chipolo d.o.o.)
+
+- **Google FMDN**: Company ID `0x00E0` (Google Find My Device Network)
+
+**Layer 2: Service UUIDs**
+
+Some trackers advertise standard BLE service UUIDs instead of (or in addition to) manufacturer data:
+
+- **Tile**: Service UUIDs `0xFD51` or `0xFD52`
+- **Samsung SmartTag (alt)**: Service UUID `0xFD6F` (SmartThings/Find)
+
+**Layer 3: Device Name (Fallback)**
+
+If manufacturer data and service UUIDs don't match, PathShield falls back to case-insensitive name matching:
+- Device name contains "tile" → Tile tracker
+- Device name contains "smarttag" → Samsung SmartTag
+- Device name contains "chipolo" → Chipolo
+
+This layered approach works because trackers must advertise these identifiers to function — they can't hide their identity without breaking their intended purpose. The combination of multiple detection methods eliminates false negatives.
+
 ### Persistence Scoring (0.0 - 1.0)
 
 **Factor 1: Detection Frequency (0.25 max)**
