@@ -210,36 +210,34 @@ bool isAllowlistedMac(const char *address) {
 
 // Detect known BLE tracker types from advertisement data
 uint8_t detectTrackerType(const NimBLEAdvertisedDevice &device) {
-  // Check manufacturer data (company ID is first 2 bytes, little-endian)
+  // Check manufacturer data (NimBLE returns company ID separately)
   if (device.haveManufacturerData()) {
+    uint16_t companyId = device.getManufacturerId();
     std::string mfgData = device.getManufacturerData();
-    if (mfgData.length() >= 2) {
-      uint16_t companyId = (uint8_t)mfgData[0] | ((uint8_t)mfgData[1] << 8);
 
-      // Apple AirTag: company ID 0x004C with 27+ bytes of payload
-      // Also catches Find My network accessories (Chipolo ONE Spot, Eufy in FM mode)
-      if (companyId == 0x004C && mfgData.length() >= 27) {
-        // AirTag/Find My devices have specific payload type byte at offset 2
-        uint8_t payloadType = (uint8_t)mfgData[2];
-        if (payloadType == 0x12 || payloadType == 0x07) {
-          return TRACKER_AIRTAG;
-        }
+    // Apple AirTag: company ID 0x004C with 25+ bytes of payload
+    // Also catches Find My network accessories (Chipolo ONE Spot, Eufy in FM mode)
+    if (companyId == 0x004C && mfgData.length() >= 25) {
+      // AirTag/Find My devices have specific payload type byte at offset 0
+      uint8_t payloadType = (uint8_t)mfgData[0];
+      if (payloadType == 0x12 || payloadType == 0x07) {
+        return TRACKER_AIRTAG;
       }
+    }
 
-      // Samsung SmartTag: company ID 0x0075
-      if (companyId == 0x0075) {
-        return TRACKER_SMARTTAG;
-      }
+    // Samsung SmartTag: company ID 0x0075
+    if (companyId == 0x0075) {
+      return TRACKER_SMARTTAG;
+    }
 
-      // Chipolo (native mode, not Find My): company ID 0x0133
-      if (companyId == 0x0133) {
-        return TRACKER_CHIPOLO;
-      }
+    // Chipolo (native mode, not Find My): company ID 0x0133
+    if (companyId == 0x0133) {
+      return TRACKER_CHIPOLO;
+    }
 
-      // Google Find My Device Network: company ID 0x00E0
-      if (companyId == 0x00E0) {
-        return TRACKER_GOOGLE_FMDN;
-      }
+    // Google Find My Device Network: company ID 0x00E0
+    if (companyId == 0x00E0) {
+      return TRACKER_GOOGLE_FMDN;
     }
   }
 
